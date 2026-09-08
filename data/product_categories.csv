@@ -1,0 +1,18 @@
+name,slug,parent_slug
+Electronics,electronics,
+Mobiles,electronics/mobiles,electronics
+Laptops,electronics/laptops,electronics
+Audio,electronics/audio,electronics
+Clothing,clothing,
+Men,clothing/men,clothing
+Women,clothing/women,clothing
+Kids,clothing/kids,clothing
+Groceries,groceries,
+Produce,groceries/produce,groceries
+Beverages,groceries/beverages,groceries
+Home,home,
+Kitchen,home/kitchen,home
+Furniture,home/furniture,home
+Beauty,beauty,
+Personal Care,beauty/personal-care,beauty
+Wellness,beauty/wellness,beauty

@@ -32,6 +32,8 @@ class Customer(TimeStampedModel):
 class CustomerAddress(TimeStampedModel):
     """Customer mailing and shipping addresses."""
 
+    external_code = models.CharField(max_length=64, unique=True)
+
     class AddressLabel(models.TextChoices):
         HOME = "home", "Home"
         WORK = "work", "Work"

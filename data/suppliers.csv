@@ -1,0 +1,11 @@
+name,code,contact_email,phone,is_active
+Supplier 1,SUP001,contact1@supplier.example.com,+1-555-4001-7001,true
+Supplier 2,SUP002,contact2@supplier.example.com,+1-555-4002-7002,true
+Supplier 3,SUP003,contact3@supplier.example.com,+1-555-4003-7003,true
+Supplier 4,SUP004,contact4@supplier.example.com,+1-555-4004-7004,true
+Supplier 5,SUP005,contact5@supplier.example.com,+1-555-4005-7005,true
+Supplier 6,SUP006,contact6@supplier.example.com,+1-555-4006-7006,true
+Supplier 7,SUP007,contact7@supplier.example.com,+1-555-4007-7007,false
+Supplier 8,SUP008,contact8@supplier.example.com,+1-555-4008-7008,true
+Supplier 9,SUP009,contact9@supplier.example.com,+1-555-4009-7009,true
+Supplier 10,SUP010,contact10@supplier.example.com,+1-555-4010-7010,true

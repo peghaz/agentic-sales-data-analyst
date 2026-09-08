@@ -8,6 +8,8 @@ dependencies = [
     "django>=6.1.1",
     "dotenv>=0.9.9",
     "psycopg2-binary>=2.9.12",
+    "rich>=15.0.0",
+    "tqdm>=4.66.5",
 ]
 
 [dependency-groups]

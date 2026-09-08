@@ -1,0 +1,269 @@
+code,customer_email,label,line1,line2,city,state,country,postal_code,is_default
+ADDR0001A,cust0001@example.com,home,101 Cedar St.,Apt 322,Manchester,GBR,United Kingdom,45036,true
+ADDR0002A,cust0002@example.com,home,102 Pine St.,Apt 617,Paris,FRA,France,78158,true
+ADDR0002B,cust0002@example.com,work,202 Pioneer Ave,,Paris,FRA,France,83760,false
+ADDR0003A,cust0003@example.com,home,103 Cedar St.,Apt 78,Manchester,GBR,United Kingdom,82700,true
+ADDR0003B,cust0003@example.com,work,203 River Ave,,Manchester,GBR,United Kingdom,24556,false
+ADDR0004A,cust0004@example.com,home,104 Elm St.,Apt 6,Denver,USA,United States,42022,true
+ADDR0004B,cust0004@example.com,work,204 Summit Ave,,Denver,USA,United States,32150,false
+ADDR0005A,cust0005@example.com,home,105 Pine St.,Apt 87,Nice,FRA,France,43469,true
+ADDR0005B,cust0005@example.com,work,205 Pioneer Ave,,Nice,FRA,France,38646,false
+ADDR0006A,cust0006@example.com,home,106 Elm St.,Apt 563,Paris,FRA,France,97426,true
+ADDR0006B,cust0006@example.com,work,206 River Ave,,Paris,FRA,France,77566,false
+ADDR0007A,cust0007@example.com,home,107 Elm St.,Apt 49,Austin,USA,United States,48183,true
+ADDR0007B,cust0007@example.com,work,207 Pioneer Ave,,Austin,USA,United States,46585,false
+ADDR0008A,cust0008@example.com,home,108 Pine St.,Apt 633,Toronto,CAN,Canada,94718,true
+ADDR0008B,cust0008@example.com,work,208 Summit Ave,,Toronto,CAN,Canada,19346,false
+ADDR0009A,cust0009@example.com,home,109 Cedar St.,Apt 651,Lyon,FRA,France,77724,true
+ADDR0010A,cust0010@example.com,home,110 Maple St.,Apt 555,Montreal,CAN,Canada,56138,true
+ADDR0010B,cust0010@example.com,work,210 River Ave,,Montreal,CAN,Canada,70820,false
+ADDR0011A,cust0011@example.com,home,111 Maple St.,Apt 16,Austin,USA,United States,64199,true
+ADDR0011B,cust0011@example.com,work,211 Pioneer Ave,,Austin,USA,United States,67820,false
+ADDR0012A,cust0012@example.com,home,112 Oak St.,Apt 243,Lyon,FRA,France,31573,true
+ADDR0013A,cust0013@example.com,home,113 Elm St.,Apt 286,Nice,FRA,France,94690,true
+ADDR0014A,cust0014@example.com,home,114 Maple St.,Apt 353,Berlin,DEU,Germany,19740,true
+ADDR0015A,cust0015@example.com,home,115 Elm St.,Apt 711,Vancouver,CAN,Canada,29527,true
+ADDR0016A,cust0016@example.com,home,116 Elm St.,Apt 564,Manchester,GBR,United Kingdom,25121,true
+ADDR0016B,cust0016@example.com,work,216 River Ave,,Manchester,GBR,United Kingdom,21742,false
+ADDR0017A,cust0017@example.com,home,117 Cedar St.,Apt 347,Cologne,DEU,Germany,77149,true
+ADDR0018A,cust0018@example.com,home,118 Maple St.,Apt 666,Miami,USA,United States,43068,true
+ADDR0018B,cust0018@example.com,work,218 River Ave,,Miami,USA,United States,42080,false
+ADDR0019A,cust0019@example.com,home,119 Pine St.,Apt 765,Manchester,GBR,United Kingdom,79632,true
+ADDR0019B,cust0019@example.com,work,219 Pioneer Ave,,Manchester,GBR,United Kingdom,54898,false
+ADDR0020A,cust0020@example.com,home,120 Cedar St.,Apt 100,Montreal,CAN,Canada,41805,true
+ADDR0021A,cust0021@example.com,home,121 Maple St.,Apt 70,Montreal,CAN,Canada,26668,true
+ADDR0021B,cust0021@example.com,work,221 Summit Ave,,Montreal,CAN,Canada,29350,false
+ADDR0022A,cust0022@example.com,home,122 Maple St.,Apt 455,Munich,DEU,Germany,89759,true
+ADDR0022B,cust0022@example.com,work,222 Market Ave,,Munich,DEU,Germany,59956,false
+ADDR0023A,cust0023@example.com,home,123 Cedar St.,Apt 125,Denver,USA,United States,22613,true
+ADDR0023B,cust0023@example.com,work,223 Summit Ave,,Denver,USA,United States,68175,false
+ADDR0024A,cust0024@example.com,home,124 Pine St.,Apt 450,Denver,USA,United States,68196,true
+ADDR0025A,cust0025@example.com,home,125 Elm St.,Apt 758,Bristol,GBR,United Kingdom,91534,true
+ADDR0026A,cust0026@example.com,home,126 Oak St.,Apt 105,Bristol,GBR,United Kingdom,90269,true
+ADDR0027A,cust0027@example.com,home,127 Pine St.,Apt 730,Vancouver,CAN,Canada,62870,true
+ADDR0027B,cust0027@example.com,work,227 Summit Ave,,Vancouver,CAN,Canada,31741,false
+ADDR0028A,cust0028@example.com,home,128 Elm St.,Apt 132,Austin,USA,United States,88846,true
+ADDR0028B,cust0028@example.com,work,228 River Ave,,Austin,USA,United States,37219,false
+ADDR0029A,cust0029@example.com,home,129 Cedar St.,Apt 552,Nice,FRA,France,59550,true
+ADDR0030A,cust0030@example.com,home,130 Oak St.,Apt 180,Leeds,GBR,United Kingdom,76672,true
+ADDR0030B,cust0030@example.com,work,230 Market Ave,,Leeds,GBR,United Kingdom,49360,false
+ADDR0031A,cust0031@example.com,home,131 Cedar St.,Apt 129,Montreal,CAN,Canada,68304,true
+ADDR0032A,cust0032@example.com,home,132 Cedar St.,Apt 315,Berlin,DEU,Germany,14739,true
+ADDR0033A,cust0033@example.com,home,133 Cedar St.,Apt 306,Nice,FRA,France,64266,true
+ADDR0033B,cust0033@example.com,work,233 Summit Ave,,Nice,FRA,France,97140,false
+ADDR0034A,cust0034@example.com,home,134 Pine St.,Apt 770,Nice,FRA,France,61056,true
+ADDR0035A,cust0035@example.com,home,135 Cedar St.,Apt 440,Denver,USA,United States,60778,true
+ADDR0036A,cust0036@example.com,home,136 Cedar St.,Apt 599,Manchester,GBR,United Kingdom,59533,true
+ADDR0036B,cust0036@example.com,work,236 Pioneer Ave,,Manchester,GBR,United Kingdom,24023,false
+ADDR0037A,cust0037@example.com,home,137 Oak St.,Apt 503,Vancouver,CAN,Canada,90972,true
+ADDR0037B,cust0037@example.com,work,237 Market Ave,,Vancouver,CAN,Canada,67074,false
+ADDR0038A,cust0038@example.com,home,138 Pine St.,Apt 32,Lyon,FRA,France,81479,true
+ADDR0038B,cust0038@example.com,work,238 Pioneer Ave,,Lyon,FRA,France,25325,false
+ADDR0039A,cust0039@example.com,home,139 Maple St.,Apt 469,Montreal,CAN,Canada,88838,true
+ADDR0039B,cust0039@example.com,work,239 Pioneer Ave,,Montreal,CAN,Canada,64573,false
+ADDR0040A,cust0040@example.com,home,140 Pine St.,Apt 4,Calgary,CAN,Canada,22676,true
+ADDR0041A,cust0041@example.com,home,141 Elm St.,Apt 643,Manchester,GBR,United Kingdom,64247,true
+ADDR0041B,cust0041@example.com,work,241 Pioneer Ave,,Manchester,GBR,United Kingdom,34992,false
+ADDR0042A,cust0042@example.com,home,142 Pine St.,Apt 609,Marseille,FRA,France,33739,true
+ADDR0042B,cust0042@example.com,work,242 Summit Ave,,Marseille,FRA,France,41024,false
+ADDR0043A,cust0043@example.com,home,143 Elm St.,Apt 102,Montreal,CAN,Canada,82187,true
+ADDR0044A,cust0044@example.com,home,144 Maple St.,Apt 22,Hamburg,DEU,Germany,99882,true
+ADDR0045A,cust0045@example.com,home,145 Elm St.,Apt 63,Denver,USA,United States,68827,true
+ADDR0046A,cust0046@example.com,home,146 Elm St.,Apt 186,Seattle,USA,United States,66118,true
+ADDR0047A,cust0047@example.com,home,147 Elm St.,Apt 112,Manchester,GBR,United Kingdom,55885,true
+ADDR0048A,cust0048@example.com,home,148 Cedar St.,Apt 621,Austin,USA,United States,50308,true
+ADDR0048B,cust0048@example.com,work,248 River Ave,,Austin,USA,United States,23413,false
+ADDR0049A,cust0049@example.com,home,149 Maple St.,Apt 421,Calgary,CAN,Canada,93066,true
+ADDR0049B,cust0049@example.com,work,249 Summit Ave,,Calgary,CAN,Canada,51833,false
+ADDR0050A,cust0050@example.com,home,150 Oak St.,Apt 760,Munich,DEU,Germany,89277,true
+ADDR0051A,cust0051@example.com,home,151 Pine St.,Apt 35,Marseille,FRA,France,82812,true
+ADDR0052A,cust0052@example.com,home,152 Pine St.,Apt 424,Marseille,FRA,France,44157,true
+ADDR0052B,cust0052@example.com,work,252 River Ave,,Marseille,FRA,France,31362,false
+ADDR0053A,cust0053@example.com,home,153 Pine St.,Apt 319,Bristol,GBR,United Kingdom,24460,true
+ADDR0054A,cust0054@example.com,home,154 Oak St.,Apt 616,Toronto,CAN,Canada,87979,true
+ADDR0054B,cust0054@example.com,work,254 Summit Ave,,Toronto,CAN,Canada,93603,false
+ADDR0055A,cust0055@example.com,home,155 Elm St.,Apt 663,New York,USA,United States,65614,true
+ADDR0056A,cust0056@example.com,home,156 Maple St.,Apt 382,Marseille,FRA,France,66437,true
+ADDR0057A,cust0057@example.com,home,157 Cedar St.,Apt 387,Munich,DEU,Germany,56958,true
+ADDR0057B,cust0057@example.com,work,257 Summit Ave,,Munich,DEU,Germany,60639,false
+ADDR0058A,cust0058@example.com,home,158 Elm St.,Apt 11,Bristol,GBR,United Kingdom,57208,true
+ADDR0059A,cust0059@example.com,home,159 Maple St.,Apt 727,Miami,USA,United States,48530,true
+ADDR0060A,cust0060@example.com,home,160 Maple St.,Apt 789,Paris,FRA,France,53366,true
+ADDR0061A,cust0061@example.com,home,161 Pine St.,Apt 3,Munich,DEU,Germany,37032,true
+ADDR0061B,cust0061@example.com,work,261 Pioneer Ave,,Munich,DEU,Germany,39999,false
+ADDR0062A,cust0062@example.com,home,162 Pine St.,Apt 634,Toronto,CAN,Canada,80739,true
+ADDR0063A,cust0063@example.com,home,163 Pine St.,Apt 130,Paris,FRA,France,24168,true
+ADDR0064A,cust0064@example.com,home,164 Maple St.,Apt 108,Toronto,CAN,Canada,19414,true
+ADDR0065A,cust0065@example.com,home,165 Oak St.,Apt 452,Berlin,DEU,Germany,83642,true
+ADDR0066A,cust0066@example.com,home,166 Pine St.,Apt 571,Leeds,GBR,United Kingdom,98659,true
+ADDR0067A,cust0067@example.com,home,167 Maple St.,Apt 425,Hamburg,DEU,Germany,50846,true
+ADDR0067B,cust0067@example.com,work,267 Market Ave,,Hamburg,DEU,Germany,89506,false
+ADDR0068A,cust0068@example.com,home,168 Maple St.,Apt 465,Berlin,DEU,Germany,85253,true
+ADDR0069A,cust0069@example.com,home,169 Oak St.,Apt 1,Cologne,DEU,Germany,47673,true
+ADDR0070A,cust0070@example.com,home,170 Elm St.,Apt 197,Austin,USA,United States,45355,true
+ADDR0071A,cust0071@example.com,home,171 Oak St.,Apt 330,Hamburg,DEU,Germany,30870,true
+ADDR0072A,cust0072@example.com,home,172 Maple St.,Apt 198,London,GBR,United Kingdom,71120,true
+ADDR0072B,cust0072@example.com,work,272 Summit Ave,,London,GBR,United Kingdom,61237,false
+ADDR0073A,cust0073@example.com,home,173 Pine St.,Apt 591,Seattle,USA,United States,97821,true
+ADDR0073B,cust0073@example.com,work,273 Market Ave,,Seattle,USA,United States,35483,false
+ADDR0074A,cust0074@example.com,home,174 Maple St.,Apt 311,Bristol,GBR,United Kingdom,80655,true
+ADDR0075A,cust0075@example.com,home,175 Oak St.,Apt 476,Paris,FRA,France,83168,true
+ADDR0075B,cust0075@example.com,work,275 Market Ave,,Paris,FRA,France,32387,false
+ADDR0076A,cust0076@example.com,home,176 Cedar St.,Apt 259,Vancouver,CAN,Canada,99538,true
+ADDR0076B,cust0076@example.com,work,276 Summit Ave,,Vancouver,CAN,Canada,87068,false
+ADDR0077A,cust0077@example.com,home,177 Oak St.,Apt 193,Munich,DEU,Germany,33328,true
+ADDR0078A,cust0078@example.com,home,178 Cedar St.,Apt 139,Berlin,DEU,Germany,91685,true
+ADDR0079A,cust0079@example.com,home,179 Cedar St.,Apt 354,Paris,FRA,France,39665,true
+ADDR0080A,cust0080@example.com,home,180 Pine St.,Apt 156,Berlin,DEU,Germany,45159,true
+ADDR0081A,cust0081@example.com,home,181 Pine St.,Apt 127,Austin,USA,United States,43872,true
+ADDR0082A,cust0082@example.com,home,182 Elm St.,Apt 324,Berlin,DEU,Germany,47217,true
+ADDR0082B,cust0082@example.com,work,282 Pioneer Ave,,Berlin,DEU,Germany,18905,false
+ADDR0083A,cust0083@example.com,home,183 Maple St.,Apt 207,Leeds,GBR,United Kingdom,95742,true
+ADDR0083B,cust0083@example.com,work,283 Pioneer Ave,,Leeds,GBR,United Kingdom,13938,false
+ADDR0084A,cust0084@example.com,home,184 Maple St.,Apt 642,Manchester,GBR,United Kingdom,51732,true
+ADDR0084B,cust0084@example.com,work,284 River Ave,,Manchester,GBR,United Kingdom,78267,false
+ADDR0085A,cust0085@example.com,home,185 Cedar St.,Apt 764,Munich,DEU,Germany,90681,true
+ADDR0085B,cust0085@example.com,work,285 Summit Ave,,Munich,DEU,Germany,98618,false
+ADDR0086A,cust0086@example.com,home,186 Elm St.,Apt 707,Marseille,FRA,France,66223,true
+ADDR0086B,cust0086@example.com,work,286 Summit Ave,,Marseille,FRA,France,57589,false
+ADDR0087A,cust0087@example.com,home,187 Cedar St.,Apt 650,Calgary,CAN,Canada,78785,true
+ADDR0087B,cust0087@example.com,work,287 River Ave,,Calgary,CAN,Canada,80424,false
+ADDR0088A,cust0088@example.com,home,188 Elm St.,Apt 477,Seattle,USA,United States,99415,true
+ADDR0088B,cust0088@example.com,work,288 Pioneer Ave,,Seattle,USA,United States,71920,false
+ADDR0089A,cust0089@example.com,home,189 Elm St.,Apt 124,Montreal,CAN,Canada,94600,true
+ADDR0090A,cust0090@example.com,home,190 Maple St.,Apt 249,New York,USA,United States,65400,true
+ADDR0090B,cust0090@example.com,work,290 Market Ave,,New York,USA,United States,46472,false
+ADDR0091A,cust0091@example.com,home,191 Maple St.,Apt 125,Montreal,CAN,Canada,15032,true
+ADDR0092A,cust0092@example.com,home,192 Pine St.,Apt 177,Marseille,FRA,France,61610,true
+ADDR0093A,cust0093@example.com,home,193 Cedar St.,Apt 309,Vancouver,CAN,Canada,33509,true
+ADDR0093B,cust0093@example.com,work,293 River Ave,,Vancouver,CAN,Canada,47506,false
+ADDR0094A,cust0094@example.com,home,194 Cedar St.,Apt 443,Cologne,DEU,Germany,36336,true
+ADDR0094B,cust0094@example.com,work,294 River Ave,,Cologne,DEU,Germany,58236,false
+ADDR0095A,cust0095@example.com,home,195 Pine St.,Apt 791,Montreal,CAN,Canada,51592,true
+ADDR0096A,cust0096@example.com,home,196 Cedar St.,Apt 92,Calgary,CAN,Canada,35498,true
+ADDR0097A,cust0097@example.com,home,197 Elm St.,Apt 181,Toronto,CAN,Canada,38916,true
+ADDR0098A,cust0098@example.com,home,198 Cedar St.,Apt 417,Calgary,CAN,Canada,71146,true
+ADDR0099A,cust0099@example.com,home,199 Pine St.,Apt 711,New York,USA,United States,22029,true
+ADDR0100A,cust0100@example.com,home,200 Pine St.,Apt 713,Leeds,GBR,United Kingdom,18822,true
+ADDR0101A,cust0101@example.com,home,201 Pine St.,Apt 429,Marseille,FRA,France,21994,true
+ADDR0101B,cust0101@example.com,work,301 Summit Ave,,Marseille,FRA,France,25620,false
+ADDR0102A,cust0102@example.com,home,202 Oak St.,Apt 254,Miami,USA,United States,52682,true
+ADDR0103A,cust0103@example.com,home,203 Pine St.,Apt 629,Manchester,GBR,United Kingdom,98263,true
+ADDR0103B,cust0103@example.com,work,303 Summit Ave,,Manchester,GBR,United Kingdom,32310,false
+ADDR0104A,cust0104@example.com,home,204 Elm St.,Apt 286,Nice,FRA,France,70267,true
+ADDR0105A,cust0105@example.com,home,205 Oak St.,Apt 273,Miami,USA,United States,44916,true
+ADDR0105B,cust0105@example.com,work,305 Market Ave,,Miami,USA,United States,61226,false
+ADDR0106A,cust0106@example.com,home,206 Pine St.,Apt 414,Miami,USA,United States,83216,true
+ADDR0107A,cust0107@example.com,home,207 Maple St.,Apt 57,Paris,FRA,France,12085,true
+ADDR0108A,cust0108@example.com,home,208 Oak St.,Apt 20,New York,USA,United States,12757,true
+ADDR0109A,cust0109@example.com,home,209 Maple St.,Apt 455,Miami,USA,United States,16668,true
+ADDR0109B,cust0109@example.com,work,309 Market Ave,,Miami,USA,United States,74585,false
+ADDR0110A,cust0110@example.com,home,210 Maple St.,Apt 383,Vancouver,CAN,Canada,69372,true
+ADDR0110B,cust0110@example.com,work,310 Pioneer Ave,,Vancouver,CAN,Canada,50865,false
+ADDR0111A,cust0111@example.com,home,211 Elm St.,Apt 711,Marseille,FRA,France,79345,true
+ADDR0112A,cust0112@example.com,home,212 Elm St.,Apt 80,Denver,USA,United States,23778,true
+ADDR0112B,cust0112@example.com,work,312 Market Ave,,Denver,USA,United States,56592,false
+ADDR0113A,cust0113@example.com,home,213 Maple St.,Apt 191,Seattle,USA,United States,13727,true
+ADDR0113B,cust0113@example.com,work,313 Market Ave,,Seattle,USA,United States,15103,false
+ADDR0114A,cust0114@example.com,home,214 Maple St.,Apt 645,New York,USA,United States,37022,true
+ADDR0114B,cust0114@example.com,work,314 Pioneer Ave,,New York,USA,United States,50547,false
+ADDR0115A,cust0115@example.com,home,215 Oak St.,Apt 774,Montreal,CAN,Canada,68079,true
+ADDR0116A,cust0116@example.com,home,216 Maple St.,Apt 346,Cologne,DEU,Germany,56068,true
+ADDR0116B,cust0116@example.com,work,316 Market Ave,,Cologne,DEU,Germany,15883,false
+ADDR0117A,cust0117@example.com,home,217 Elm St.,Apt 451,Austin,USA,United States,15537,true
+ADDR0118A,cust0118@example.com,home,218 Cedar St.,Apt 461,Austin,USA,United States,72196,true
+ADDR0118B,cust0118@example.com,work,318 Summit Ave,,Austin,USA,United States,75389,false
+ADDR0119A,cust0119@example.com,home,219 Cedar St.,Apt 728,Lyon,FRA,France,91133,true
+ADDR0119B,cust0119@example.com,work,319 Pioneer Ave,,Lyon,FRA,France,34939,false
+ADDR0120A,cust0120@example.com,home,220 Maple St.,Apt 132,Montreal,CAN,Canada,73789,true
+ADDR0121A,cust0121@example.com,home,221 Elm St.,Apt 126,Miami,USA,United States,58209,true
+ADDR0122A,cust0122@example.com,home,222 Cedar St.,Apt 609,Austin,USA,United States,88519,true
+ADDR0122B,cust0122@example.com,work,322 Summit Ave,,Austin,USA,United States,74088,false
+ADDR0123A,cust0123@example.com,home,223 Elm St.,Apt 349,Denver,USA,United States,51160,true
+ADDR0123B,cust0123@example.com,work,323 Summit Ave,,Denver,USA,United States,17409,false
+ADDR0124A,cust0124@example.com,home,224 Oak St.,Apt 338,Cologne,DEU,Germany,22635,true
+ADDR0124B,cust0124@example.com,work,324 River Ave,,Cologne,DEU,Germany,77922,false
+ADDR0125A,cust0125@example.com,home,225 Cedar St.,Apt 475,Calgary,CAN,Canada,35683,true
+ADDR0125B,cust0125@example.com,work,325 Pioneer Ave,,Calgary,CAN,Canada,28105,false
+ADDR0126A,cust0126@example.com,home,226 Elm St.,Apt 701,London,GBR,United Kingdom,99305,true
+ADDR0127A,cust0127@example.com,home,227 Oak St.,Apt 768,Munich,DEU,Germany,63307,true
+ADDR0127B,cust0127@example.com,work,327 Market Ave,,Munich,DEU,Germany,77754,false
+ADDR0128A,cust0128@example.com,home,228 Cedar St.,Apt 179,Toronto,CAN,Canada,11944,true
+ADDR0129A,cust0129@example.com,home,229 Oak St.,Apt 647,Calgary,CAN,Canada,30284,true
+ADDR0129B,cust0129@example.com,work,329 Summit Ave,,Calgary,CAN,Canada,27830,false
+ADDR0130A,cust0130@example.com,home,230 Cedar St.,Apt 230,Hamburg,DEU,Germany,71220,true
+ADDR0131A,cust0131@example.com,home,231 Pine St.,Apt 46,Miami,USA,United States,60083,true
+ADDR0131B,cust0131@example.com,work,331 Pioneer Ave,,Miami,USA,United States,81097,false
+ADDR0132A,cust0132@example.com,home,232 Maple St.,Apt 306,Marseille,FRA,France,26009,true
+ADDR0132B,cust0132@example.com,work,332 River Ave,,Marseille,FRA,France,80250,false
+ADDR0133A,cust0133@example.com,home,233 Oak St.,Apt 237,Seattle,USA,United States,91947,true
+ADDR0133B,cust0133@example.com,work,333 Market Ave,,Seattle,USA,United States,60344,false
+ADDR0134A,cust0134@example.com,home,234 Elm St.,Apt 747,Nice,FRA,France,35505,true
+ADDR0135A,cust0135@example.com,home,235 Elm St.,Apt 406,Hamburg,DEU,Germany,14305,true
+ADDR0136A,cust0136@example.com,home,236 Cedar St.,Apt 413,Toronto,CAN,Canada,92403,true
+ADDR0136B,cust0136@example.com,work,336 Pioneer Ave,,Toronto,CAN,Canada,34954,false
+ADDR0137A,cust0137@example.com,home,237 Elm St.,Apt 63,Nice,FRA,France,69772,true
+ADDR0137B,cust0137@example.com,work,337 Market Ave,,Nice,FRA,France,26791,false
+ADDR0138A,cust0138@example.com,home,238 Cedar St.,Apt 403,Montreal,CAN,Canada,88828,true
+ADDR0139A,cust0139@example.com,home,239 Oak St.,Apt 130,Calgary,CAN,Canada,74319,true
+ADDR0139B,cust0139@example.com,work,339 River Ave,,Calgary,CAN,Canada,51747,false
+ADDR0140A,cust0140@example.com,home,240 Maple St.,Apt 207,London,GBR,United Kingdom,57437,true
+ADDR0140B,cust0140@example.com,work,340 Pioneer Ave,,London,GBR,United Kingdom,67129,false
+ADDR0141A,cust0141@example.com,home,241 Maple St.,Apt 743,Montreal,CAN,Canada,72198,true
+ADDR0141B,cust0141@example.com,work,341 Pioneer Ave,,Montreal,CAN,Canada,32157,false
+ADDR0142A,cust0142@example.com,home,242 Oak St.,Apt 646,Manchester,GBR,United Kingdom,57960,true
+ADDR0142B,cust0142@example.com,work,342 Summit Ave,,Manchester,GBR,United Kingdom,82599,false
+ADDR0143A,cust0143@example.com,home,243 Cedar St.,Apt 570,London,GBR,United Kingdom,95904,true
+ADDR0144A,cust0144@example.com,home,244 Maple St.,Apt 333,Paris,FRA,France,43254,true
+ADDR0144B,cust0144@example.com,work,344 River Ave,,Paris,FRA,France,19993,false
+ADDR0145A,cust0145@example.com,home,245 Maple St.,Apt 149,Austin,USA,United States,33193,true
+ADDR0145B,cust0145@example.com,work,345 Market Ave,,Austin,USA,United States,24255,false
+ADDR0146A,cust0146@example.com,home,246 Maple St.,Apt 377,Manchester,GBR,United Kingdom,25443,true
+ADDR0146B,cust0146@example.com,work,346 Market Ave,,Manchester,GBR,United Kingdom,88796,false
+ADDR0147A,cust0147@example.com,home,247 Cedar St.,Apt 217,London,GBR,United Kingdom,47865,true
+ADDR0147B,cust0147@example.com,work,347 Pioneer Ave,,London,GBR,United Kingdom,79297,false
+ADDR0148A,cust0148@example.com,home,248 Cedar St.,Apt 413,Vancouver,CAN,Canada,93436,true
+ADDR0148B,cust0148@example.com,work,348 Market Ave,,Vancouver,CAN,Canada,59145,false
+ADDR0149A,cust0149@example.com,home,249 Oak St.,Apt 190,Toronto,CAN,Canada,32934,true
+ADDR0150A,cust0150@example.com,home,250 Oak St.,Apt 501,Marseille,FRA,France,79772,true
+ADDR0151A,cust0151@example.com,home,251 Pine St.,Apt 731,Berlin,DEU,Germany,11564,true
+ADDR0151B,cust0151@example.com,work,351 Market Ave,,Berlin,DEU,Germany,47511,false
+ADDR0152A,cust0152@example.com,home,252 Pine St.,Apt 696,Munich,DEU,Germany,29967,true
+ADDR0152B,cust0152@example.com,work,352 River Ave,,Munich,DEU,Germany,66420,false
+ADDR0153A,cust0153@example.com,home,253 Oak St.,Apt 629,London,GBR,United Kingdom,92321,true
+ADDR0154A,cust0154@example.com,home,254 Elm St.,Apt 414,Bristol,GBR,United Kingdom,62571,true
+ADDR0154B,cust0154@example.com,work,354 River Ave,,Bristol,GBR,United Kingdom,21560,false
+ADDR0155A,cust0155@example.com,home,255 Elm St.,Apt 742,Vancouver,CAN,Canada,16741,true
+ADDR0156A,cust0156@example.com,home,256 Pine St.,Apt 589,London,GBR,United Kingdom,61653,true
+ADDR0156B,cust0156@example.com,work,356 River Ave,,London,GBR,United Kingdom,11408,false
+ADDR0157A,cust0157@example.com,home,257 Maple St.,Apt 346,Marseille,FRA,France,65986,true
+ADDR0157B,cust0157@example.com,work,357 Market Ave,,Marseille,FRA,France,39920,false
+ADDR0158A,cust0158@example.com,home,258 Cedar St.,Apt 171,Montreal,CAN,Canada,60947,true
+ADDR0159A,cust0159@example.com,home,259 Maple St.,Apt 11,Cologne,DEU,Germany,91769,true
+ADDR0160A,cust0160@example.com,home,260 Pine St.,Apt 261,Marseille,FRA,France,47529,true
+ADDR0160B,cust0160@example.com,work,360 Summit Ave,,Marseille,FRA,France,15875,false
+ADDR0161A,cust0161@example.com,home,261 Oak St.,Apt 28,Montreal,CAN,Canada,51075,true
+ADDR0162A,cust0162@example.com,home,262 Elm St.,Apt 399,Vancouver,CAN,Canada,98856,true
+ADDR0163A,cust0163@example.com,home,263 Elm St.,Apt 516,Munich,DEU,Germany,87684,true
+ADDR0164A,cust0164@example.com,home,264 Elm St.,Apt 745,London,GBR,United Kingdom,49589,true
+ADDR0165A,cust0165@example.com,home,265 Maple St.,Apt 678,Hamburg,DEU,Germany,42623,true
+ADDR0166A,cust0166@example.com,home,266 Maple St.,Apt 595,Vancouver,CAN,Canada,92053,true
+ADDR0167A,cust0167@example.com,home,267 Cedar St.,Apt 341,Cologne,DEU,Germany,42542,true
+ADDR0168A,cust0168@example.com,home,268 Maple St.,Apt 116,Marseille,FRA,France,10878,true
+ADDR0168B,cust0168@example.com,work,368 River Ave,,Marseille,FRA,France,63425,false
+ADDR0169A,cust0169@example.com,home,269 Oak St.,Apt 776,Seattle,USA,United States,76772,true
+ADDR0170A,cust0170@example.com,home,270 Elm St.,Apt 18,Toronto,CAN,Canada,21465,true
+ADDR0171A,cust0171@example.com,home,271 Cedar St.,Apt 534,Hamburg,DEU,Germany,44228,true
+ADDR0171B,cust0171@example.com,work,371 River Ave,,Hamburg,DEU,Germany,77695,false
+ADDR0172A,cust0172@example.com,home,272 Elm St.,Apt 752,Toronto,CAN,Canada,30089,true
+ADDR0172B,cust0172@example.com,work,372 Summit Ave,,Toronto,CAN,Canada,38481,false
+ADDR0173A,cust0173@example.com,home,273 Elm St.,Apt 280,Denver,USA,United States,65706,true
+ADDR0174A,cust0174@example.com,home,274 Oak St.,Apt 170,Munich,DEU,Germany,92319,true
+ADDR0174B,cust0174@example.com,work,374 River Ave,,Munich,DEU,Germany,72199,false
+ADDR0175A,cust0175@example.com,home,275 Cedar St.,Apt 163,Cologne,DEU,Germany,21099,true
+ADDR0175B,cust0175@example.com,work,375 Summit Ave,,Cologne,DEU,Germany,38291,false
+ADDR0176A,cust0176@example.com,home,276 Elm St.,Apt 658,Bristol,GBR,United Kingdom,89190,true
+ADDR0177A,cust0177@example.com,home,277 Oak St.,Apt 657,Cologne,DEU,Germany,55997,true
+ADDR0178A,cust0178@example.com,home,278 Cedar St.,Apt 590,Miami,USA,United States,14638,true
+ADDR0179A,cust0179@example.com,home,279 Maple St.,Apt 131,Vancouver,CAN,Canada,66636,true
+ADDR0180A,cust0180@example.com,home,280 Cedar St.,Apt 161,Marseille,FRA,France,31807,true

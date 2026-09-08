@@ -1,0 +1,8 @@
+name,code,email,phone,timezone,is_active
+Shop 1,SHOP001,support1@shop.example.com,+1-800-7701-1001,UTC,true
+Shop 2,SHOP002,support2@shop.example.com,+1-800-7702-1002,Europe/London,true
+Shop 3,SHOP003,support3@shop.example.com,+1-800-7703-1003,UTC,true
+Shop 4,SHOP004,support4@shop.example.com,+1-800-7704-1004,America/New_York,true
+Shop 5,SHOP005,support5@shop.example.com,+1-800-7705-1005,Europe/Berlin,true
+Shop 6,SHOP006,support6@shop.example.com,+1-800-7706-1006,Europe/Berlin,true
+Shop 7,SHOP007,support7@shop.example.com,+1-800-7707-1007,Europe/Berlin,true
