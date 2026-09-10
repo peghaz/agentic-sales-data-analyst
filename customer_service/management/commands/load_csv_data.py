@@ -137,7 +137,9 @@ class Command(BaseCommand):
         created = 0
         skipped = 0
 
-        self.console.print(Panel.fit("Loading product categories", title="[blue]Step 1"))
+        self.console.print(
+            Panel.fit("Loading product categories", title="[blue]Step 1")
+        )
         for row in tqdm(rows, desc="product_categories.csv", unit="rows", leave=False):
             slug = row["slug"]
             parent = by_slug.get(row["parent_slug"]) if row["parent_slug"] else None
@@ -269,7 +271,9 @@ class Command(BaseCommand):
         created = 0
         skipped = 0
 
-        self.console.print(Panel.fit("Loading customer addresses", title="[blue]Step 5"))
+        self.console.print(
+            Panel.fit("Loading customer addresses", title="[blue]Step 5")
+        )
         for row in tqdm(rows, desc="customer_addresses.csv", unit="rows", leave=False):
             customer = customers_by_email[row["customer_email"]]
             address, was_created = CustomerAddress.objects.get_or_create(
@@ -335,7 +339,9 @@ class Command(BaseCommand):
                 skipped += 1
 
         self._stage_summary["Products"] = (len(rows), created, skipped)
-        self._print_stage_detail("Products", file_path.name, len(rows), created, skipped)
+        self._print_stage_detail(
+            "Products", file_path.name, len(rows), created, skipped
+        )
         return by_sku
 
     def _load_purchases(
@@ -356,9 +362,7 @@ class Command(BaseCommand):
             shop = shops_by_code[row["shop_code"]]
             address_code = row.get("shipping_address_code", "")
             shipping_address = (
-                addresses_by_code.get(address_code)
-                if address_code
-                else None
+                addresses_by_code.get(address_code) if address_code else None
             )
             purchase, was_created = Purchase.objects.get_or_create(
                 order_number=row["order_number"],
@@ -521,8 +525,7 @@ class Command(BaseCommand):
         summary_lines = ["[bold]Stage totals[/bold]"]
         for stage, (processed, created, skipped) in self._stage_summary.items():
             summary_lines.append(
-                f"{stage}: processed={processed} "
-                f"created={created} skipped={skipped}"
+                f"{stage}: processed={processed} created={created} skipped={skipped}"
             )
         self.console.print(
             Panel.fit(

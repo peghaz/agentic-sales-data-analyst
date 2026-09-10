@@ -24,22 +24,24 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=changeme
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5656
+LLM_HOST_MODEL_PATH=/absolute/path/to/sqlcoder-7b-2
+LLM_CONTAINER_MODEL_PATH=/models/defog/sqlcoder-7b-2
+LLM_MODEL_NAME=sqlcoder-7b-2
+LLM_DTYPE=bfloat16
+LLM_GPU_MEMORY_UTILIZATION=0.6
+LLM_PORT=8000
+LLM_TENSOR_PARALLEL_SIZE=1
+LLM_GPU_DEVICE_ID=0
 ```
 
 `config/settings.py` uses `python-dotenv` to load `.env`.
 
-## 3) Start PostgreSQL with Docker Compose (DB only)
+## 3) Start services with Docker Compose
 
-`docker-compose.yml` is intentionally limited to PostgreSQL.
+Start both DB and LLM containers together:
 
 ```bash
 docker compose up -d
-```
-
-Verify the container:
-
-```bash
-docker compose ps
 ```
 
 ## 4) Install Python dependencies
@@ -54,7 +56,35 @@ uv sync
 python manage.py migrate
 ```
 
-## 6) Load synthetic data from `data/*.csv`
+## 6) Start LLM service only (optional)
+
+Bring up just the LLM service:
+
+```bash
+docker compose up -d llm
+```
+
+Verify it:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/v1/models
+```
+
+If startup reports a networking error like `network <id> not found`, reset stale compose state and recreate both containers:
+
+```bash
+docker compose down --remove-orphans
+docker network prune -f
+docker compose up -d --force-recreate
+```
+
+To switch GPU, set:
+
+- `LLM_GPU_DEVICE_ID=0` for GPU 0
+- `LLM_GPU_DEVICE_ID=1` for GPU 1
+
+## 7) Load synthetic data from `data/*.csv`
 
 The command uses:
 
@@ -86,7 +116,7 @@ Expected file inputs:
 - `data/payments.csv`
 - `data/shipments.csv`
 
-## 7) Reset data in-place
+## 8) Reset data in-place
 
 The DB-reset command clears rows and resets PostgreSQL auto-increment counters.
 
@@ -107,7 +137,7 @@ python manage.py clear_database --app-only --yes
 
 This command is destructive and intended for local/experiment data resets.
 
-## 8) Stop and reset DB (optional)
+## 9) Stop and reset DB (optional)
 
 ```bash
 docker compose down
