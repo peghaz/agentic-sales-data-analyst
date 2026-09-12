@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,7 +53,12 @@ class DBAgent:
 
     TOOL_NAME = "execute_readonly_sql"
 
-    def __init__(self, client: OpenAILLMClient, adapter: PostgresDatabaseAdapter, config: DBAgentConfig):
+    def __init__(
+        self,
+        client: OpenAILLMClient,
+        adapter: PostgresDatabaseAdapter,
+        config: DBAgentConfig,
+    ):
         self._client = client
         self._adapter = adapter
         self._config = config
@@ -90,7 +94,10 @@ class DBAgent:
                 max_tokens=1536,
             )
             total_latency_ms += response.latency_ms
-            assistant_message = response.message or {"role": "assistant", "content": response.content}
+            assistant_message = response.message or {
+                "role": "assistant",
+                "content": response.content,
+            }
             messages.append(assistant_message)
 
             if not response.tool_calls:
@@ -115,11 +122,11 @@ class DBAgent:
                     "Enable tool calling on the model server."
                 )
 
-                for call in response.tool_calls:
-                    if (call.get("name") or "").lower() != self.TOOL_NAME:
-                        traces.append(
-                            QueryTrace(
-                                sql="",
+            for call in response.tool_calls:
+                if (call.get("name") or "").lower() != self.TOOL_NAME:
+                    traces.append(
+                        QueryTrace(
+                            sql="",
                             purpose=call.get("name"),
                             row_count=0,
                             truncated=False,
@@ -306,7 +313,10 @@ class DBAgent:
             "You must answer user questions by first calling the tool `execute_readonly_sql`.",
             "Do not use assumptions, fabricated rows, or SQL that mutates data.",
             "You are only allowed to read from tables listed below.",
-            "Use one tool call per question before responding unless the user asks for non-data tasks.",
+            (
+                "Use one tool call per question before responding unless "
+                "the user asks for non-data tasks."
+            ),
             "",
             "Database schema (refreshes on every question):",
         ]

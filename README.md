@@ -123,6 +123,14 @@ uv run manage.py db_ask "How many active customers are in the system?"
 uv run manage.py db_ask "Top 5 products by total purchase amount this month."
 ```
 
+Run the Streamlit chat interface locally:
+
+```bash
+uv run streamlit run gui.py
+```
+
+The chat UI uses the same environment, schema checks, and read-only SQL safeguards as `db_ask`, and it can render query results as interactive tables per-turn.
+
 `db_ask` flow:
 
 - Refreshes schema from PostgreSQL every run.
