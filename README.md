@@ -129,7 +129,25 @@ Run the Streamlit chat interface locally:
 uv run streamlit run gui.py
 ```
 
-The chat UI uses the same environment, schema checks, and read-only SQL safeguards as `db_ask`, and it can render query results as interactive tables per-turn.
+The **Sales Data Analyst** chat uses the same environment, schema checks, and
+read-only SQL safeguards as `db_ask`. It renders formatted Markdown responses
+and displays query results as interactive, downloadable tables.
+
+Try these showcase questions:
+
+- Give me an executive sales summary for the latest 12 months in the data: revenue by currency, orders, active customers, average order value, top shop, and top product.
+- Compare monthly revenue and order volume by shop for the latest 12 months, including month-over-month change and keeping currencies separate.
+- Rank the top 10 customers by lifetime spend, showing order count, average order value, last purchase date, and keeping currencies separate.
+- Build a customer retention view by signup month: customers acquired and how many purchased again within 30, 60, and 90 days.
+- Find high-value customers at risk: at least 5 paid or shipped orders, but no purchase in the 90 days before the latest order in the dataset.
+- Which product categories deliver the highest estimated gross profit and margin percentage, using product cost and line-item sales and keeping currencies separate?
+- Find the product pairs most frequently bought together, with pair count and combined sales by currency.
+- Compare payment failure rates by payment method and shop, including attempts, failed payments, and failed amount by currency.
+- Compare carrier performance by destination country: shipment count, average and 90th-percentile delivery time, return rate, and shipping cost by currency.
+- Show cancellation and refund rates by shop and month, with affected order value by currency.
+
+Monetary showcase questions keep currencies separate so unrelated values are not
+combined into misleading totals.
 
 `db_ask` flow:
 
@@ -154,7 +172,7 @@ You can adjust behavior with:
 - `DB_AGENT_MAX_ROWS`
 - `DB_AGENT_MAX_RESULT_CHARS`
 - `DB_AGENT_STATEMENT_TIMEOUT_MS`
-- `DB_AGENT_MAX_TOOL_CALLS`
+- `DB_AGENT_MAX_TOOL_CALLS` — maximum SQL tool executions; the final answer turn is not counted
 - `DB_AGENT_QUERY_RETRIES`
 
 To switch GPU, set:

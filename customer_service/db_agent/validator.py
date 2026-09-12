@@ -67,8 +67,11 @@ def validate_readonly_sql(sql: str, catalog: DatabaseSchema) -> str:
 
 def _validate_referenced_tables(statement: str, catalog: DatabaseSchema) -> None:
     references = set(_extract_referenced_relations(statement))
+    cte_names = _extract_cte_names(statement)
     for reference in references:
         schema_name, table_name = _split_relation(reference)
+        if schema_name is None and table_name.lower() in cte_names:
+            continue
         if schema_name is None:
             matches = catalog.find_by_name(table_name)
             if len(matches) == 1:
@@ -85,6 +88,26 @@ def _validate_referenced_tables(statement: str, catalog: DatabaseSchema) -> None
             raise SQLValidationError(
                 f"Table '{schema_name}.{table_name}' is not in the allowed schema list."
             )
+
+
+def _extract_cte_names(statement: str) -> set[str]:
+    """Return query-local relation names declared by a WITH clause."""
+
+    pattern = re.compile(
+        r"(?:\bwith\b|,)\s*"
+        r"(?:recursive\s+)?"
+        r"(?P<name>\"(?:[^\"]|\"\")*\"|[a-z_][a-z0-9_$]*)\s*"
+        r"(?:\([^)]*\)\s*)?"
+        r"as\s+(?:(?:not\s+)?materialized\s+)?\(",
+        flags=re.IGNORECASE,
+    )
+    names: set[str] = set()
+    for match in pattern.finditer(statement):
+        name = match.group("name")
+        if name.startswith('"') and name.endswith('"'):
+            name = name[1:-1].replace('""', '"')
+        names.add(name.lower())
+    return names
 
 
 def _extract_referenced_relations(statement: str) -> list[str]:

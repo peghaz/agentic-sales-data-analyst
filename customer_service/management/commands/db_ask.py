@@ -32,7 +32,10 @@ class Command(BaseCommand):
         parser.add_argument(
             "--max-tool-calls",
             type=int,
-            help="Override max tool call rounds.",
+            help=(
+                "Override the maximum number of SQL tool calls. "
+                "The final answer turn is not counted."
+            ),
         )
 
     def handle(self, *args, **options):

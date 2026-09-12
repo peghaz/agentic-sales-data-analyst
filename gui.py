@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from typing import Any
 
 import streamlit as st
@@ -14,130 +15,93 @@ from customer_service.llm.client import LLMError, OpenAILLMClient
 
 load_dotenv()
 
+WELCOME_MESSAGE = (
+    "Ask a sales question to explore customers, orders, products, payments, "
+    "and fulfillment."
+)
 
-def _inject_styles() -> None:
-    st.markdown(
-        """
-        <style>
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
+EXAMPLE_PROMPTS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Executive",
+        (
+            (
+                "Give me an executive sales summary for the latest 12 months in the data: "
+                "revenue by currency, orders, active customers, average order value, top "
+                "shop, and top product."
+            ),
+            (
+                "Compare monthly revenue and order volume by shop for the latest 12 months, "
+                "including month-over-month change and keeping currencies separate."
+            ),
+        ),
+    ),
+    (
+        "Customers",
+        (
+            (
+                "Rank the top 10 customers by lifetime spend, showing order count, average "
+                "order value, last purchase date, and keeping currencies separate."
+            ),
+            (
+                "Build a customer retention view by signup month: customers acquired and "
+                "how many purchased again within 30, 60, and 90 days."
+            ),
+            (
+                "Find high-value customers at risk: at least 5 paid or shipped orders, but "
+                "no purchase in the 90 days before the latest order in the dataset."
+            ),
+        ),
+    ),
+    (
+        "Products",
+        (
+            (
+                "Which product categories deliver the highest estimated gross profit and "
+                "margin percentage, using product cost and line-item sales and keeping "
+                "currencies separate?"
+            ),
+            (
+                "Find the product pairs most frequently bought together, with pair count "
+                "and combined sales by currency."
+            ),
+        ),
+    ),
+    (
+        "Operations",
+        (
+            (
+                "Compare payment failure rates by payment method and shop, including "
+                "attempts, failed payments, and failed amount by currency."
+            ),
+            (
+                "Compare carrier performance by destination country: shipment count, "
+                "average and 90th-percentile delivery time, return rate, and shipping cost "
+                "by currency."
+            ),
+            (
+                "Show cancellation and refund rates by shop and month, with affected order "
+                "value by currency."
+            ),
+        ),
+    ),
+)
 
-        :root {
-            --paper: #0c111d;
-            --panel: #121b2d;
-            --ink: #edf1f8;
-            --muted: #8ea0bb;
-            --accent: #7bb8ff;
-            --danger: #ff9a5f;
-            --radius: 14px;
-            --focus: 0 0 0 3px rgba(123, 184, 255, 0.32);
+
+def _initial_conversation() -> list[dict[str, Any]]:
+    return [
+        {
+            "role": "assistant",
+            "content": WELCOME_MESSAGE,
+            "traces": [],
+            "model": None,
+            "endpoint": None,
+            "latency_ms": None,
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "total_tokens": None,
+            "error": None,
         }
-
-        html, body {
-            font-family: 'IBM Plex Sans', 'Avenir Next', 'Segoe UI', sans-serif;
-            color: var(--ink);
-        }
-
-        .block-container {
-            max-width: 1080px;
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-            animation: sweep-in 380ms cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .stApp {
-            background:
-                radial-gradient(circle at 20% 8%, rgba(123, 184, 255, 0.13), transparent 34%),
-                radial-gradient(circle at 80% 12%, rgba(20, 64, 114, 0.17), transparent 30%),
-                linear-gradient(175deg, #090f1a 0%, #0b1321 42%, #0a1320 100%);
-        }
-
-        .assistant-msg {
-            border: 1px solid rgba(151, 176, 220, 0.2);
-            border-radius: var(--radius);
-            background: var(--panel);
-            padding: 0.8rem 1rem;
-            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.22);
-        }
-
-        [data-testid='stChatMessage'] {
-            gap: 0.5rem;
-        }
-
-        .trace-box {
-            border: 1px dashed rgba(141, 162, 188, 0.45);
-            border-radius: 11px;
-            padding: 0.8rem;
-            margin: 0.6rem 0 0.2rem;
-            background: rgba(9, 16, 28, 0.66);
-        }
-
-        .section-kicker {
-            letter-spacing: 0.08em;
-            font-size: 0.78rem;
-            color: var(--muted);
-            text-transform: uppercase;
-        }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-            background: linear-gradient(180deg, #7edb8d, #2fbc7d);
-            display: inline-block;
-            margin-right: 0.35rem;
-            box-shadow: 0 0 0 3px rgba(126, 219, 141, 0.14);
-        }
-
-        .stButton>button {
-            border-radius: 10px;
-            font-weight: 600;
-            border: 1px solid #2c435f;
-            background: rgba(19, 43, 73, 0.72);
-        }
-
-        .stButton>button:hover {
-            border-color: var(--accent);
-            background: linear-gradient(180deg, #1f4f84, #173c63);
-            transform: translateY(-1px);
-        }
-
-        .stButton>button:focus-visible,
-        input:focus-visible {
-            outline: none;
-            box-shadow: var(--focus);
-        }
-
-        .table-tools {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-
-        @keyframes sweep-in {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-                filter: blur(2px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-                filter: blur(0);
-            }
-        }
-
-        @media (max-width: 760px) {
-            .table-tools {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    ]
 
 
 def _format_error_for_user(exc: Exception) -> str:
@@ -189,8 +153,85 @@ def _rows_to_csv(rows: list[dict[str, Any]]) -> bytes:
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
-    writer.writerows(rows)
+    writer.writerows(
+        {
+            key: _json_text(value) if _is_nested(value) else value
+            for key, value in row.items()
+        }
+        for row in rows
+    )
     return output.getvalue().encode("utf-8")
+
+
+def _is_nested(value: Any) -> bool:
+    return isinstance(value, (dict, list, tuple))
+
+
+def _json_text(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _table_safe_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            key: _json_text(value) if _is_nested(value) else value
+            for key, value in row.items()
+        }
+        for row in rows
+    ]
+
+
+def _nested_table_rows(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, dict):
+        return _table_safe_rows([value])
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return []
+        if all(isinstance(item, dict) for item in value):
+            return _table_safe_rows(list(value))
+        return [
+            {"value": _json_text(item) if _is_nested(item) else item}
+            for item in value
+        ]
+    return [{"value": value}]
+
+
+def _display_label(column: str) -> str:
+    return column.replace("_", " ").strip().capitalize()
+
+
+def _render_trace_rows(rows: list[dict[str, Any]]) -> None:
+    nested_cells: list[tuple[int, str, Any]] = []
+    scalar_rows: list[dict[str, Any]] = []
+
+    for row_index, row in enumerate(rows):
+        scalar_row: dict[str, Any] = {}
+        for column, value in row.items():
+            if _is_nested(value):
+                nested_cells.append((row_index, column, value))
+            else:
+                scalar_row[column] = value
+        if scalar_row:
+            scalar_rows.append(scalar_row)
+
+    if not nested_cells:
+        st.dataframe(rows, width="stretch", hide_index=True)
+        return
+
+    if scalar_rows:
+        st.markdown("**Summary**")
+        st.dataframe(scalar_rows, width="stretch", hide_index=True)
+
+    for row_index, column, value in nested_cells:
+        label = _display_label(column)
+        if len(rows) > 1:
+            label = f"{label} · Row {row_index + 1}"
+        st.markdown(f"**{label}**")
+        nested_rows = _nested_table_rows(value)
+        if nested_rows:
+            st.dataframe(nested_rows, width="stretch", hide_index=True)
+        else:
+            st.caption("No values returned.")
 
 
 def _previous_user_query(conversation: list[dict[str, Any]], idx: int) -> str:
@@ -208,7 +249,7 @@ def _run_question(question: str) -> None:
 
     st.session_state.conversation.append({"role": "user", "content": question})
 
-    with st.status("Running DB agent...", expanded=False):
+    with st.status("Analyzing sales data...", expanded=False):
         try:
             client, agent, config = _get_runtime()
             result = agent.ask(question)
@@ -228,7 +269,7 @@ def _run_question(question: str) -> None:
                     "error": None,
                 }
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - UI boundary maps failures for users.
             st.session_state.conversation.append(
                 {
                     "role": "assistant",
@@ -247,11 +288,31 @@ def _run_question(question: str) -> None:
             )
 
 
-def _render_trace(trace: QueryTrace, turn_index: int, trace_index: int) -> None:
-    with st.container():
-        st.markdown("<div class='trace-box'>", unsafe_allow_html=True)
+def _render_trace(
+    trace: QueryTrace,
+    turn_index: int,
+    trace_index: int,
+    *,
+    recovered: bool,
+) -> None:
+    row_label = "row" if trace.row_count == 1 else "rows"
+    if recovered:
+        with st.expander(
+            f"Query {trace_index + 1} · corrected after retry",
+            expanded=False,
+        ):
+            if trace.purpose:
+                st.caption(f"Purpose: {trace.purpose}")
+            st.warning("This generated query failed and was corrected later.")
+            if trace.error:
+                st.code(trace.error, language="text")
+            if trace.sql:
+                st.code(trace.sql, language="sql")
+        return
+
+    with st.container(border=True):
         st.markdown(
-            f"**Query {trace_index + 1}** · **{trace.row_count} rows**"
+            f"**Query {trace_index + 1}** · **{trace.row_count} {row_label}**"
             + ("  *(truncated)*" if trace.truncated else ""),
         )
         if trace.purpose:
@@ -262,11 +323,7 @@ def _render_trace(trace: QueryTrace, turn_index: int, trace_index: int) -> None:
 
         if trace.columns:
             if trace.rows:
-                st.dataframe(
-                    trace.rows,
-                    use_container_width=True,
-                    hide_index=True,
-                )
+                _render_trace_rows(trace.rows)
 
                 csv_data = _rows_to_csv(trace.rows)
                 st.download_button(
@@ -286,7 +343,6 @@ def _render_trace(trace: QueryTrace, turn_index: int, trace_index: int) -> None:
                 st.caption("No SQL captured for this trace.")
             st.caption(f"Truncated: {'yes' if trace.truncated else 'no'}")
             st.caption(f"Rows: {trace.row_count}")
-        st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _render_conversation() -> None:
@@ -297,125 +353,101 @@ def _render_conversation() -> None:
             continue
 
         with st.chat_message("assistant"):
-            with st.container():
-                if msg.get("error"):
-                    st.markdown("<div class='assistant-msg'>", unsafe_allow_html=True)
-                    st.error(msg["content"])
-                    if msg.get("error"):
-                        with st.expander("Debug detail", expanded=False):
-                            st.caption(msg.get("error"))
-                    st.markdown("</div>", unsafe_allow_html=True)
-                else:
-                    st.markdown(
-                        f"<div class='assistant-msg'>{msg['content']}</div>",
-                        unsafe_allow_html=True,
-                    )
+            if msg.get("error"):
+                st.error(msg["content"])
+                with st.expander("Debug detail", expanded=False):
+                    st.caption(msg["error"])
+            else:
+                st.markdown(msg["content"])
 
-                if msg.get("traces"):
-                    st.markdown("")
-                    st.markdown("#### Analysis records")
-                    for trace_index, trace in enumerate(msg.get("traces", [])):
-                        _render_trace(trace, turn_index, trace_index)
-                else:
-                    st.info("No SQL trace was produced.")
-
-                if msg.get("model"):
-                    with st.expander("Run metadata", expanded=False):
-                        st.caption(f"Model: {msg['model']}")
-                        st.caption(f"Endpoint: {msg['endpoint']}")
-                        if msg.get("latency_ms") is not None:
-                            st.caption(f"Latency: {msg['latency_ms']:.2f} ms")
-                        if msg.get("prompt_tokens") is not None:
-                            st.caption(
-                                f"Tokens: prompt={msg['prompt_tokens']}, "
-                                f"completion={msg['completion_tokens']}, total={msg['total_tokens']}"
+            if msg.get("traces"):
+                st.markdown("#### Analysis records")
+                traces = msg.get("traces", [])
+                for trace_index, trace in enumerate(traces):
+                    recovered = bool(
+                        trace.error
+                        and any(
+                            not later_trace.error
+                            and (
+                                trace.purpose is None
+                                or later_trace.purpose == trace.purpose
                             )
+                            for later_trace in traces[trace_index + 1 :]
+                        )
+                    )
+                    _render_trace(
+                        trace,
+                        turn_index,
+                        trace_index,
+                        recovered=recovered,
+                    )
+            elif msg.get("model"):
+                st.caption("No SQL trace was produced for this response.")
 
-                st.markdown("<div class='section-kicker'>&nbsp;</div>", unsafe_allow_html=True)
-                st.markdown("<div class='section-kicker'>&nbsp;</div>", unsafe_allow_html=True)
-                prev_question = _previous_user_query(st.session_state.conversation, turn_index)
-                if prev_question:
-                    cols = st.columns([4, 1])
-                    with cols[1]:
-                        if st.button(
-                            "Retry",
-                            key=f"retry-{turn_index}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.queued_prompt = prev_question
-                            st.rerun()
+            if msg.get("model"):
+                with st.expander("Run metadata", expanded=False):
+                    st.caption(f"Model: {msg['model']}")
+                    st.caption(f"Endpoint: {msg['endpoint']}")
+                    if msg.get("latency_ms") is not None:
+                        st.caption(f"Latency: {msg['latency_ms']:.2f} ms")
+                    if msg.get("prompt_tokens") is not None:
+                        st.caption(
+                            f"Tokens: prompt={msg['prompt_tokens']}, "
+                            f"completion={msg['completion_tokens']}, total={msg['total_tokens']}"
+                        )
+
+            prev_question = _previous_user_query(st.session_state.conversation, turn_index)
+            if prev_question:
+                cols = st.columns([4, 1])
+                with cols[1]:
+                    if st.button(
+                        "Retry",
+                        key=f"retry-{turn_index}",
+                        width="stretch",
+                    ):
+                        st.session_state.queued_prompt = prev_question
+                        st.rerun()
 
 
 def _sidebar() -> None:
     with st.sidebar:
-        st.markdown("## DB Analyst Chat")
-        if st.button("Clear chat", use_container_width=True):
-            st.session_state.conversation = [
-                {
-                    "role": "assistant",
-                    "content": "Ready to run. Ask a question to trigger schema-aware SQL execution.",
-                    "traces": [],
-                    "model": None,
-                    "endpoint": None,
-                    "latency_ms": None,
-                    "prompt_tokens": None,
-                    "completion_tokens": None,
-                    "total_tokens": None,
-                    "error": None,
-                }
-            ]
+        st.header("Sales Data Analyst")
+        if st.button("Clear chat", width="stretch"):
+            st.session_state.conversation = _initial_conversation()
             st.rerun()
 
         st.caption(
-            "Read-only mode enabled by default. The agent inspects schema each turn "
-            "and sends SELECT-only SQL through the configured model tool-call API."
+            "Read-only mode is enabled. Questions are answered with schema-aware, "
+            "SELECT-only SQL."
         )
 
-        st.markdown("#### Example prompts")
-        examples = [
-            "How many active customers are in the system?",
-            "Top 5 customers by total purchases this month",
-            "List products with low stock",
-        ]
-        for i, prompt in enumerate(examples):
-            if st.button(
-                prompt,
-                key=f"example-{i}",
-                use_container_width=True,
-            ):
-                st.session_state.queued_prompt = prompt
-                st.rerun()
+        with st.expander("Try a showcase question", expanded=True):
+            for category_index, (category, prompts) in enumerate(EXAMPLE_PROMPTS):
+                st.markdown(f"**{category}**")
+                for prompt_index, prompt in enumerate(prompts):
+                    if st.button(
+                        prompt,
+                        key=f"example-{category_index}-{prompt_index}",
+                        width="stretch",
+                    ):
+                        st.session_state.queued_prompt = prompt
+                        st.rerun()
 
 
 st.set_page_config(
-    page_title="DB Agent Analyst Chat",
-    page_icon="🧮",
+    page_title="Sales Data Analyst",
+    page_icon="📊",
     layout="wide",
 )
 
-_inject_styles()
-
 if "conversation" not in st.session_state:
-    st.session_state.conversation = [
-        {
-            "role": "assistant",
-            "content": "Ready to run. Ask a question to trigger schema-aware SQL execution.",
-            "traces": [],
-            "model": None,
-            "endpoint": None,
-            "latency_ms": None,
-            "prompt_tokens": None,
-            "completion_tokens": None,
-            "total_tokens": None,
-            "error": None,
-        }
-    ]
+    st.session_state.conversation = _initial_conversation()
 
 if "queued_prompt" not in st.session_state:
     st.session_state.queued_prompt = None
 
-st.title("DB Analyst Ledger")
-st.caption("Chat with your local PostgreSQL schema through read-only SQL prompts.")
+st.title("Sales Data Analyst")
+st.caption("Ask questions about customers, revenue, products, payments, and fulfillment.")
 _sidebar()
 
 queued_prompt = st.session_state.get("queued_prompt")
@@ -423,7 +455,7 @@ if queued_prompt:
     st.session_state.queued_prompt = None
     _run_question(queued_prompt)
 
-rendered_trigger = st.chat_input("Ask for a count, list, summary, or trend")
+rendered_trigger = st.chat_input("Ask a question about your sales data")
 if rendered_trigger:
     _run_question(rendered_trigger)
 

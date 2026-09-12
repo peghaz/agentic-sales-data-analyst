@@ -469,6 +469,16 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
     def _normalize_value(value: Any) -> Any:
         if value is None:
             return None
+        if isinstance(value, dict):
+            return {
+                str(key): PostgresDatabaseAdapter._normalize_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, (list, tuple)):
+            return [
+                PostgresDatabaseAdapter._normalize_value(item)
+                for item in value
+            ]
         if isinstance(value, Decimal):
             return str(value)
         if isinstance(value, (datetime, date)):

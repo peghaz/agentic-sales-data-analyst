@@ -82,13 +82,15 @@ class DBAgent:
         traces: list[QueryTrace] = []
         attempts = 0
         total_latency_ms = 0.0
+        max_tool_calls = max(1, self._config.max_tool_calls)
+        tool_calls_used = 0
 
-        for iteration in range(max(1, self._config.max_tool_calls)):
+        while tool_calls_used < max_tool_calls:
             response = self._client.ask(
                 prompt="",
                 messages=messages,
                 tools=tools,
-                tool_choice="required" if iteration == 0 else "auto",
+                tool_choice="required" if tool_calls_used == 0 else "auto",
                 parallel_tool_calls=False,
                 temperature=0.0,
                 max_tokens=1536,
@@ -102,7 +104,7 @@ class DBAgent:
 
             if not response.tool_calls:
                 if response.content:
-                    if iteration == 0:
+                    if tool_calls_used == 0:
                         raise DBAgentError(
                             "Model did not emit a tool call. "
                             "Enable tool/function calling for this model."
@@ -123,6 +125,36 @@ class DBAgent:
                 )
 
             for call in response.tool_calls:
+                if tool_calls_used >= max_tool_calls:
+                    error = (
+                        f"SQL tool-call budget of {max_tool_calls} reached; "
+                        "this query was not executed."
+                    )
+                    try:
+                        skipped_payload = self._parse_tool_arguments(call)
+                    except (json.JSONDecodeError, LLMResponseError):
+                        skipped_payload = {}
+                    traces.append(
+                        QueryTrace(
+                            sql=str(skipped_payload.get("sql", "")).strip(),
+                            purpose=skipped_payload.get("purpose"),
+                            row_count=0,
+                            truncated=False,
+                            columns=(),
+                            rows=[],
+                            error=error,
+                        )
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.get("id", ""),
+                            "content": json.dumps({"error": error}),
+                        }
+                    )
+                    continue
+
+                tool_calls_used += 1
                 if (call.get("name") or "").lower() != self.TOOL_NAME:
                     traces.append(
                         QueryTrace(
@@ -268,8 +300,45 @@ class DBAgent:
                         }
                     )
 
-        raise DBAgentError(
-            "Maximum tool-call turns reached without a final assistant answer."
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"The SQL tool-call budget of {max_tool_calls} has been used. "
+                    "Do not request another tool call. Using only the tool results "
+                    "already available, provide the best possible final answer now. "
+                    "Clearly identify any part of the question that could not be answered."
+                ),
+            }
+        )
+        try:
+            final_response = self._client.ask(
+                prompt="",
+                messages=messages,
+                temperature=0.0,
+                max_tokens=1536,
+            )
+        except LLMResponseError as exc:
+            raise DBAgentError(
+                "SQL tool-call budget was reached, but the model failed to generate "
+                f"a final answer: {exc}"
+            ) from exc
+
+        total_latency_ms += final_response.latency_ms
+        if not final_response.content:
+            raise DBAgentError(
+                "SQL tool-call budget was reached, but the model did not produce "
+                "a final assistant answer."
+            )
+
+        return DBAgentResult(
+            answer=final_response.content,
+            model=final_response.model,
+            latency_ms=total_latency_ms,
+            prompt_tokens=final_response.prompt_tokens,
+            completion_tokens=final_response.completion_tokens,
+            total_tokens=final_response.total_tokens,
+            traces=traces,
         )
 
     @staticmethod
@@ -314,8 +383,31 @@ class DBAgent:
             "Do not use assumptions, fabricated rows, or SQL that mutates data.",
             "You are only allowed to read from tables listed below.",
             (
-                "Use one tool call per question before responding unless "
-                "the user asks for non-data tasks."
+                "Call the tool one time at a time. For compound data questions, you may "
+                "make multiple sequential tool calls."
+            ),
+            (
+                f"You have at most {max(1, self._config.max_tool_calls)} SQL tool calls. "
+                "Plan every requested metric before the first call and stay within that "
+                "budget. Do not repeat a metric already returned."
+            ),
+            (
+                "Do not spend a separate exploratory call on date bounds, distributions, "
+                "or data shape when the same fact can be derived with a CTE or subquery "
+                "inside the analysis query."
+            ),
+            (
+                "Combine related metrics when they fit one flat relational result set. "
+                "For differently shaped results, use separate sequential calls instead "
+                "of packing rows into json_agg or row_to_json."
+            ),
+            (
+                "Use descriptive, non-reserved names for CTEs and aliases. Once you have "
+                "enough data, stop calling tools and answer."
+            ),
+            (
+                "Never add, compare, or rank monetary values across currencies unless "
+                "conversion data is available; group monetary results by currency instead."
             ),
             "",
             "Database schema (refreshes on every question):",
@@ -338,8 +430,8 @@ class DBAgent:
                 )
         lines.append("")
         lines.append(
-            "Return a short natural-language answer after tool output. "
-            "If no rows are returned, say so clearly."
+            "Return a concise Markdown answer after tool output. Use a Markdown table "
+            "for multi-row comparisons. If no rows are returned, say so clearly."
         )
         return "\n".join(lines)
 
