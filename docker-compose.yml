@@ -23,7 +23,7 @@ services:
       - .env
     command:
       - --model
-      - ${LLM_CONTAINER_MODEL_PATH:-/models/defog/sqlcoder-7b-2}
+      - ${LLM_CONTAINER_MODEL_PATH:-/models/llm}
       - --dtype
       - ${LLM_DTYPE:-bfloat16}
       - --host
@@ -31,14 +31,14 @@ services:
       - --port
       - ${LLM_PORT:-8000}
       - --served-model-name
-      - ${LLM_MODEL_NAME:-sqlcoder-7b-2}
+      - ${LLM_MODEL_NAME:-qwen-3.8-27b}
       - --tensor-parallel-size
       - ${LLM_TENSOR_PARALLEL_SIZE:-1}
       - --gpu-memory-utilization
       - ${LLM_GPU_MEMORY_UTILIZATION:-0.6}
       - --trust-remote-code
     volumes:
-      - "${LLM_HOST_MODEL_PATH:?Set LLM_HOST_MODEL_PATH in .env}:${LLM_CONTAINER_MODEL_PATH:-/models/defog/sqlcoder-7b-2}:ro"
+      - "${LLM_HOST_MODEL_PATH:-/absolute/path/to/your/llm/model}:${LLM_CONTAINER_MODEL_PATH:-/models/llm}:ro"
     deploy:
       resources:
         reservations:

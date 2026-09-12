@@ -24,17 +24,45 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=changeme
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5656
-LLM_HOST_MODEL_PATH=/absolute/path/to/sqlcoder-7b-2
-LLM_CONTAINER_MODEL_PATH=/models/defog/sqlcoder-7b-2
-LLM_MODEL_NAME=sqlcoder-7b-2
+LLM_HOST_MODEL_PATH=/absolute/path/to/your/llm/model
+LLM_CONTAINER_MODEL_PATH=/models/llm
+LLM_MODEL_NAME=qwen-3.8-27b
+LLM_API_MODE=chat
 LLM_DTYPE=bfloat16
 LLM_GPU_MEMORY_UTILIZATION=0.6
+LLM_HOST=127.0.0.1
 LLM_PORT=8000
+# LLM_API_BASE_URL=http://192.168.1.50:8000/v1
 LLM_TENSOR_PARALLEL_SIZE=1
+LLM_API_KEY=EMPTY
+LLM_REQUEST_TIMEOUT_SECONDS=60
 LLM_GPU_DEVICE_ID=0
 ```
 
 `config/settings.py` uses `python-dotenv` to load `.env`.
+
+For an LLM running on another machine, set its IPv4 address or hostname with
+`LLM_HOST`. `LLM_PORT` is used to build `http://<host>:<port>/v1`:
+
+```env
+LLM_HOST=192.168.1.50
+LLM_PORT=8000
+```
+
+Set `LLM_API_BASE_URL` when you need a complete endpoint, such as HTTPS, IPv6,
+a proxy, or a nonstandard API path. It takes precedence over `LLM_HOST` and
+`LLM_PORT`:
+
+```env
+LLM_API_BASE_URL=https://llm.example.com/v1
+```
+
+`LLM_API_MODE` controls which OpenAI-compatible endpoint is used:
+
+- `chat` calls `/v1/chat/completions` with system and user messages. This is the
+  default for chat-native models like Qwen, Llama Chat, and similar.
+- `completion` calls `/v1/completions` with a raw prompt. Use it for models or
+  endpoints that do not define a chat template.
 
 ## 3) Start services with Docker Compose
 
@@ -78,6 +106,48 @@ docker compose down --remove-orphans
 docker network prune -f
 docker compose up -d --force-recreate
 ```
+
+### 6b) Manual LLM smoke check
+
+Run a prompt directly from Django once the LLM service is up:
+
+```bash
+python manage.py llm_ask "List three shop names."
+python manage.py llm_ask --system "You are a data analyst assistant." "Summarize the top 5 customers by total purchases."
+```
+
+`llm_ask` is useful for plain LLM prompts. For database questions, use `db_ask`:
+
+```bash
+uv run manage.py db_ask "How many active customers are in the system?"
+uv run manage.py db_ask "Top 5 products by total purchase amount this month."
+```
+
+`db_ask` flow:
+
+- Refreshes schema from PostgreSQL every run.
+- Injects schema context into system prompt for grounding.
+- Uses a read-only `execute_readonly_sql(sql, purpose)` tool.
+- Validates SQL and then executes with caps from `DB_AGENT_*` env values.
+- Returns final answer plus SQL execution trace.
+
+For vLLM deployments, tool-calling must be enabled in the server configuration:
+
+```bash
+--enable-auto-tool-choice
+--tool-call-parser qwen
+```
+
+You can adjust behavior with:
+
+- `DB_AGENT_DATABASE_URL`
+- `DB_AGENT_ALLOWED_SCHEMAS`
+- `DB_AGENT_ALLOWED_TABLES`
+- `DB_AGENT_MAX_ROWS`
+- `DB_AGENT_MAX_RESULT_CHARS`
+- `DB_AGENT_STATEMENT_TIMEOUT_MS`
+- `DB_AGENT_MAX_TOOL_CALLS`
+- `DB_AGENT_QUERY_RETRIES`
 
 To switch GPU, set:
 
