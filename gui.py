@@ -4,6 +4,7 @@ import csv
 import io
 import json
 from typing import Any
+from uuid import uuid4
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -11,13 +12,18 @@ from dotenv import load_dotenv
 from customer_service.db_agent import DBAgent, DBAgentError, QueryTrace
 from customer_service.db_agent.config import DBAgentConfig
 from customer_service.db_agent.database import DatabaseError, PostgresDatabaseAdapter
+from customer_service.db_agent.presentation import (
+    charts_for_trace,
+    display_label,
+    metrics_for_traces,
+)
 from customer_service.llm.client import LLMError, OpenAILLMClient
 
 load_dotenv()
 
 WELCOME_MESSAGE = (
-    "Ask a sales question to explore customers, orders, products, payments, "
-    "and fulfillment."
+    "Ask about sales, customers, products, or operations. I’ll summarize the "
+    "finding and show the data behind it."
 )
 
 EXAMPLE_PROMPTS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -107,19 +113,19 @@ def _initial_conversation() -> list[dict[str, Any]]:
 def _format_error_for_user(exc: Exception) -> str:
     if isinstance(exc, LLMError):
         return (
-            "LLM connection or response validation failed. "
-            "Check your model endpoint and make sure tool-calling is enabled."
+            "The analysis service did not respond as expected. "
+            "Please retry, or contact an administrator if it continues."
         )
     if isinstance(exc, DatabaseError):
         return (
-            "Could not inspect or query the database. "
-            "Check DB credentials, network, and table permissions."
+            "I couldn't reach the sales data right now. "
+            "Please retry, or contact an administrator if it continues."
         )
     if isinstance(exc, DBAgentError):
-        return f"Agent flow error: {exc}"
+        return "I couldn't complete this analysis. Please retry or ask a narrower question."
     if isinstance(exc, ValueError):
-        return str(exc)
-    return "Something blocked this turn. Check .env and service availability."
+        return "The app is not configured correctly. Please contact an administrator."
+    return "Something interrupted this analysis. Please try again."
 
 
 def _build_runtime() -> tuple[OpenAILLMClient, DBAgent, DBAgentConfig]:
@@ -133,9 +139,10 @@ def _build_runtime() -> tuple[OpenAILLMClient, DBAgent, DBAgentConfig]:
     return client, agent, config
 
 
-@st.cache_resource(show_spinner=False)
 def _get_runtime() -> tuple[OpenAILLMClient, DBAgent, DBAgentConfig]:
-    return _build_runtime()
+    if "runtime" not in st.session_state:
+        st.session_state.runtime = _build_runtime()
+    return st.session_state.runtime
 
 
 def _rows_to_csv(rows: list[dict[str, Any]]) -> bytes:
@@ -190,14 +197,19 @@ def _nested_table_rows(value: Any) -> list[dict[str, Any]]:
         if all(isinstance(item, dict) for item in value):
             return _table_safe_rows(list(value))
         return [
-            {"value": _json_text(item) if _is_nested(item) else item}
-            for item in value
+            {"value": _json_text(item) if _is_nested(item) else item} for item in value
         ]
     return [{"value": value}]
 
 
 def _display_label(column: str) -> str:
-    return column.replace("_", " ").strip().capitalize()
+    return display_label(column)
+
+
+def _friendly_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {_display_label(column): value for column, value in row.items()} for row in rows
+    ]
 
 
 def _render_trace_rows(rows: list[dict[str, Any]]) -> None:
@@ -215,12 +227,12 @@ def _render_trace_rows(rows: list[dict[str, Any]]) -> None:
             scalar_rows.append(scalar_row)
 
     if not nested_cells:
-        st.dataframe(rows, width="stretch", hide_index=True)
+        st.dataframe(_friendly_rows(rows), width="stretch", hide_index=True)
         return
 
     if scalar_rows:
         st.markdown("**Summary**")
-        st.dataframe(scalar_rows, width="stretch", hide_index=True)
+        st.dataframe(_friendly_rows(scalar_rows), width="stretch", hide_index=True)
 
     for row_index, column, value in nested_cells:
         label = _display_label(column)
@@ -229,7 +241,7 @@ def _render_trace_rows(rows: list[dict[str, Any]]) -> None:
         st.markdown(f"**{label}**")
         nested_rows = _nested_table_rows(value)
         if nested_rows:
-            st.dataframe(nested_rows, width="stretch", hide_index=True)
+            st.dataframe(_friendly_rows(nested_rows), width="stretch", hide_index=True)
         else:
             st.caption("No values returned.")
 
@@ -242,7 +254,7 @@ def _previous_user_query(conversation: list[dict[str, Any]], idx: int) -> str:
     return ""
 
 
-def _run_question(question: str) -> None:
+def _run_question(question: str, *, force_query: bool = False) -> None:
     if not question or not question.strip():
         st.warning("Type a question before sending.")
         return
@@ -252,7 +264,11 @@ def _run_question(question: str) -> None:
     with st.status("Analyzing sales data...", expanded=False):
         try:
             client, agent, config = _get_runtime()
-            result = agent.ask(question)
+            result = agent.ask(
+                question,
+                thread_id=st.session_state.thread_id,
+                force_query=force_query,
+            )
             st.session_state.conversation.append(
                 {
                     "role": "assistant",
@@ -288,61 +304,88 @@ def _run_question(question: str) -> None:
             )
 
 
-def _render_trace(
-    trace: QueryTrace,
-    turn_index: int,
-    trace_index: int,
-    *,
-    recovered: bool,
-) -> None:
-    row_label = "row" if trace.row_count == 1 else "rows"
-    if recovered:
-        with st.expander(
-            f"Query {trace_index + 1} · corrected after retry",
-            expanded=False,
-        ):
+def _recovered(traces: list[QueryTrace], trace_index: int) -> bool:
+    trace = traces[trace_index]
+    return bool(
+        trace.error
+        and any(
+            not later.error
+            and (trace.purpose is None or later.purpose == trace.purpose)
+            for later in traces[trace_index + 1 :]
+        )
+    )
+
+
+def _render_metrics(traces: list[QueryTrace]) -> None:
+    metrics = metrics_for_traces(traces)
+    if not metrics:
+        return
+    for start in range(0, len(metrics), 3):
+        row = metrics[start : start + 3]
+        columns = st.columns(len(row))
+        for column, metric in zip(columns, row, strict=True):
+            with column:
+                st.metric(metric.label, metric.value)
+
+
+def _render_data_trace(trace: QueryTrace, turn_index: int, trace_index: int) -> None:
+    if trace.error or not trace.columns:
+        return
+    st.markdown(f"**Supporting data {trace_index + 1}**")
+    if trace.truncated:
+        st.warning(
+            "This result was limited to the rows shown; conclusions may be partial."
+        )
+    if not trace.rows:
+        st.caption("No matching data was found.")
+        return
+
+    for chart in charts_for_trace(trace):
+        st.caption(chart.title)
+        if chart.kind == "line":
+            st.line_chart(chart.rows, x=chart.x, y=chart.y, width="stretch")
+        else:
+            st.bar_chart(chart.rows, x=chart.x, y=chart.y, width="stretch")
+
+    _render_trace_rows(trace.rows)
+    st.download_button(
+        "Download data as CSV",
+        _rows_to_csv(trace.rows),
+        file_name=f"analysis_{turn_index + 1}_{trace_index + 1}.csv",
+        mime="text/csv",
+        key=f"trace-download-{turn_index}-{trace_index}",
+    )
+
+
+def _render_methodology(msg: dict[str, Any], traces: list[QueryTrace]) -> None:
+    with st.expander("How this was calculated", expanded=False):
+        for trace_index, trace in enumerate(traces):
+            row_label = "row" if trace.row_count == 1 else "rows"
+            status = (
+                " · corrected after retry"
+                if _recovered(traces, trace_index)
+                else " · could not be completed"
+                if trace.error
+                else ""
+            )
+            st.markdown(
+                f"**Step {trace_index + 1}{status}** · {trace.row_count} {row_label}"
+            )
             if trace.purpose:
-                st.caption(f"Purpose: {trace.purpose}")
-            st.warning("This generated query failed and was corrected later.")
+                st.caption(trace.purpose)
             if trace.error:
                 st.code(trace.error, language="text")
             if trace.sql:
                 st.code(trace.sql, language="sql")
-        return
-
-    with st.container(border=True):
-        st.markdown(
-            f"**Query {trace_index + 1}** · **{trace.row_count} {row_label}**"
-            + ("  *(truncated)*" if trace.truncated else ""),
-        )
-        if trace.purpose:
-            st.caption(f"Purpose: {trace.purpose}")
-
-        if trace.error:
-            st.error(trace.error)
-
-        if trace.columns:
-            if trace.rows:
-                _render_trace_rows(trace.rows)
-
-                csv_data = _rows_to_csv(trace.rows)
-                st.download_button(
-                    "Download CSV",
-                    csv_data,
-                    file_name=f"trace_{turn_index + 1}_{trace_index + 1}.csv",
-                    mime="text/csv",
-                    key=f"trace-download-{turn_index}-{trace_index}",
-                )
-            else:
-                st.caption("No rows returned.")
-
-        with st.expander("How this was calculated", expanded=False):
-            if trace.sql:
-                st.code(trace.sql, language="sql")
-            else:
-                st.caption("No SQL captured for this trace.")
-            st.caption(f"Truncated: {'yes' if trace.truncated else 'no'}")
-            st.caption(f"Rows: {trace.row_count}")
+            if trace.truncated:
+                st.caption("Result was limited to the configured row cap.")
+        if msg.get("model"):
+            st.caption(f"Model: {msg['model']}")
+            st.caption(f"Endpoint: {msg['endpoint']}")
+            if msg.get("latency_ms") is not None:
+                st.caption(f"Latency: {msg['latency_ms']:.2f} ms")
+            if msg.get("total_tokens") is not None:
+                st.caption(f"Tokens used: {msg['total_tokens']}")
 
 
 def _render_conversation() -> None:
@@ -360,44 +403,32 @@ def _render_conversation() -> None:
             else:
                 st.markdown(msg["content"])
 
-            if msg.get("traces"):
-                st.markdown("#### Analysis records")
-                traces = msg.get("traces", [])
-                for trace_index, trace in enumerate(traces):
-                    recovered = bool(
-                        trace.error
-                        and any(
-                            not later_trace.error
-                            and (
-                                trace.purpose is None
-                                or later_trace.purpose == trace.purpose
-                            )
-                            for later_trace in traces[trace_index + 1 :]
-                        )
+            traces = msg.get("traces") or []
+            if traces:
+                incomplete = any(
+                    trace.error and not _recovered(traces, index)
+                    for index, trace in enumerate(traces)
+                )
+                if incomplete:
+                    st.warning(
+                        "Part of this analysis could not be completed. "
+                        "See how this was calculated for details."
                     )
-                    _render_trace(
-                        trace,
-                        turn_index,
-                        trace_index,
-                        recovered=recovered,
-                    )
+                _render_metrics(traces)
+                if any(not trace.error and trace.columns for trace in traces):
+                    st.markdown("##### Data behind this answer")
+                    for trace_index, trace in enumerate(traces):
+                        _render_data_trace(trace, turn_index, trace_index)
+                _render_methodology(msg, traces)
             elif msg.get("model"):
-                st.caption("No SQL trace was produced for this response.")
+                st.caption(
+                    "Answered from the conversation context; no new data was queried."
+                )
 
-            if msg.get("model"):
-                with st.expander("Run metadata", expanded=False):
-                    st.caption(f"Model: {msg['model']}")
-                    st.caption(f"Endpoint: {msg['endpoint']}")
-                    if msg.get("latency_ms") is not None:
-                        st.caption(f"Latency: {msg['latency_ms']:.2f} ms")
-                    if msg.get("prompt_tokens") is not None:
-                        st.caption(
-                            f"Tokens: prompt={msg['prompt_tokens']}, "
-                            f"completion={msg['completion_tokens']}, total={msg['total_tokens']}"
-                        )
-
-            prev_question = _previous_user_query(st.session_state.conversation, turn_index)
-            if prev_question:
+            prev_question = _previous_user_query(
+                st.session_state.conversation, turn_index
+            )
+            if prev_question and turn_index == len(st.session_state.conversation) - 1:
                 cols = st.columns([4, 1])
                 with cols[1]:
                     if st.button(
@@ -406,6 +437,7 @@ def _render_conversation() -> None:
                         width="stretch",
                     ):
                         st.session_state.queued_prompt = prev_question
+                        st.session_state.queued_force_query = True
                         st.rerun()
 
 
@@ -414,11 +446,15 @@ def _sidebar() -> None:
         st.header("Sales Data Analyst")
         if st.button("Clear chat", width="stretch"):
             st.session_state.conversation = _initial_conversation()
+            st.session_state.pop("runtime", None)
+            st.session_state.thread_id = uuid4().hex
+            st.session_state.queued_prompt = None
+            st.session_state.queued_force_query = False
             st.rerun()
 
         st.caption(
-            "Read-only mode is enabled. Questions are answered with schema-aware, "
-            "SELECT-only SQL."
+            "Your questions explore the data without changing it. "
+            "The details behind each answer are available when you need them."
         )
 
         with st.expander("Try a showcase question", expanded=True):
@@ -431,6 +467,7 @@ def _sidebar() -> None:
                         width="stretch",
                     ):
                         st.session_state.queued_prompt = prompt
+                        st.session_state.queued_force_query = False
                         st.rerun()
 
 
@@ -446,14 +483,22 @@ if "conversation" not in st.session_state:
 if "queued_prompt" not in st.session_state:
     st.session_state.queued_prompt = None
 
+if "queued_force_query" not in st.session_state:
+    st.session_state.queued_force_query = False
+
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = uuid4().hex
+
 st.title("Sales Data Analyst")
-st.caption("Ask questions about customers, revenue, products, payments, and fulfillment.")
+st.caption("Clear findings, useful comparisons, and the numbers behind each answer.")
 _sidebar()
 
 queued_prompt = st.session_state.get("queued_prompt")
 if queued_prompt:
     st.session_state.queued_prompt = None
-    _run_question(queued_prompt)
+    force_query = st.session_state.queued_force_query
+    st.session_state.queued_force_query = False
+    _run_question(queued_prompt, force_query=force_query)
 
 rendered_trigger = st.chat_input("Ask a question about your sales data")
 if rendered_trigger:

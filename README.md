@@ -130,8 +130,14 @@ uv run streamlit run gui.py
 ```
 
 The **Sales Data Analyst** chat uses the same environment, schema checks, and
-read-only SQL safeguards as `db_ask`. It renders formatted Markdown responses
-and displays query results as interactive, downloadable tables.
+read-only SQL safeguards as `db_ask`. Answers lead with business findings, then
+show relevant KPI cards, charts, and downloadable tables. The SQL and run
+details are available under **How this was calculated**.
+
+Follow-up questions use the current chat as context. For example, after a
+monthly sales comparison, ask "Which shop drove the change?" or "Now show only
+GBP." Chat context is held in memory for the current Streamlit session only;
+**Clear chat** starts a new conversation, and old conversations are not saved.
 
 Try these showcase questions:
 
@@ -156,6 +162,15 @@ combined into misleading totals.
 - Uses a read-only `execute_readonly_sql(sql, purpose)` tool.
 - Validates SQL and then executes with caps from `DB_AGENT_*` env values.
 - Returns final answer plus SQL execution trace.
+
+The agent loop is implemented as a LangGraph workflow: refresh the allowed
+schema, ask the model, validate and execute each read-only SQL tool call, then
+produce a final answer. Its in-memory checkpointer enables session-scoped
+follow-ups. The OpenAI-compatible client remains the model adapter, and the
+existing SQL validator and database limits remain the execution boundary.
+`db_ask` remains a single-question command. Programmatic callers can use `agent.ask(question,
+thread_id="session-id")` for follow-ups; `force_query=True` requires a fresh
+database read when re-running an answer.
 
 For vLLM deployments, tool-calling must be enabled in the server configuration:
 
