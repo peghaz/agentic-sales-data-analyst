@@ -5,6 +5,8 @@ sales data in plain language. It uses an OpenAI-compatible model to plan
 read-only SQL queries, validates every query, and presents business findings
 with KPI cards, charts, and downloadable tables.
 
+> 💡 **Extensibility:** Replacing the database with a different one will easily turn this repo into an analyst of a different purpose.
+
 The setup instructions below are for the developer or operator running the
 application. Business users only need the Streamlit URL produced at startup.
 
