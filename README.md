@@ -8,6 +8,8 @@ with KPI cards, charts, and downloadable tables.
 The setup instructions below are for the developer or operator running the
 application. Business users only need the Streamlit URL produced at startup.
 
+![image](docs/showcase.png)
+
 ## Quick start
 
 This recommended path runs PostgreSQL locally with Docker and connects to an
