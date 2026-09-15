@@ -203,19 +203,56 @@ class OpenAILLMClient:
 
         first_choice = completion.choices[0]
         message = getattr(first_choice, "message", None)
-        if self._config.api_mode == "chat":
-            content = (message.content or "").strip() if message else ""
-        else:
-            content = (getattr(first_choice, "text", None) or "").strip()
-        if not content:
-            if not message or not getattr(message, "tool_calls", None):
-                raise LLMResponseError("LLM returned empty response content.")
-
         usage = getattr(completion, "usage", None)
         prompt_tokens = getattr(usage, "prompt_tokens", None) if usage else None
         completion_tokens = getattr(usage, "completion_tokens", None) if usage else None
         total_tokens = getattr(usage, "total_tokens", None) if usage else None
+        completion_details = (
+            getattr(usage, "completion_tokens_details", None) if usage else None
+        )
+        reasoning_tokens = (
+            getattr(completion_details, "reasoning_tokens", None)
+            if completion_details
+            else None
+        )
         tool_calls = self._extract_tool_calls(message)
+        if self._config.api_mode == "chat":
+            raw_content = self._message_field(message, "content")
+            content = raw_content.strip() if isinstance(raw_content, str) else ""
+        else:
+            content = (getattr(first_choice, "text", None) or "").strip()
+        if not content and not tool_calls:
+            raw_calls = self._message_field(message, "tool_calls") or []
+            raw_call_count = (
+                len(raw_calls) if isinstance(raw_calls, (list, tuple)) else 1
+            )
+            reasoning = self._message_field(
+                message, "reasoning_content"
+            ) or self._message_field(message, "reasoning")
+            finish_reason = getattr(first_choice, "finish_reason", None)
+            if raw_call_count:
+                issue = "LLM returned tool calls that could not be parsed"
+            elif finish_reason == "length":
+                issue = (
+                    "LLM returned empty response content after reaching the "
+                    "output-token limit"
+                )
+            else:
+                issue = "LLM returned empty response content"
+            hint = (
+                " Increase DB_AGENT_MODEL_MAX_TOKENS or set "
+                "DB_AGENT_ENABLE_THINKING=false."
+                if finish_reason == "length"
+                else ""
+            )
+            raise LLMResponseError(
+                f"{issue} (model={getattr(completion, 'model', None) or self._config.model!r}, "
+                f"finish_reason={finish_reason!r}, "
+                f"completion_tokens={completion_tokens!r}, "
+                f"reasoning_tokens={reasoning_tokens!r}, "
+                f"reasoning_present={bool(reasoning) or bool(reasoning_tokens)}, "
+                f"raw_tool_calls={raw_call_count}).{hint}"
+            )
         response_message = self._build_response_message(message)
 
         return LLMResponse(
@@ -232,8 +269,14 @@ class OpenAILLMClient:
         )
 
     @staticmethod
+    def _message_field(message: Any, name: str) -> Any:
+        if isinstance(message, dict):
+            return message.get(name)
+        return getattr(message, name, None)
+
+    @staticmethod
     def _extract_tool_calls(message: Any) -> list[dict[str, Any]]:
-        raw_tool_calls = getattr(message, "tool_calls", None) or []
+        raw_tool_calls = OpenAILLMClient._message_field(message, "tool_calls") or []
         normalized: list[dict[str, Any]] = []
         for raw_call in raw_tool_calls:
             call_id = getattr(raw_call, "id", "")

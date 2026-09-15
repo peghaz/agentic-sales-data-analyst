@@ -1,4 +1,7 @@
+"""Streamlit rendering and chat interaction tests."""
+
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -6,6 +9,9 @@ from django.test import SimpleTestCase
 from streamlit.testing.v1 import AppTest
 
 from customer_service.db_agent.agent import DBAgentResult, QueryTrace
+from customer_service.db_agent.config import DBAgentConfig
+from customer_service.db_agent.database import DatabaseSchema
+from customer_service.llm.client import LLMConfig, LLMResponseError
 
 GUI_PATH = Path(__file__).resolve().parents[1] / "gui.py"
 
@@ -227,3 +233,85 @@ class GUITraceRenderingTests(SimpleTestCase):
             ],
         )
         self.assertIn("How this was calculated", [item.label for item in app.expander])
+
+
+class GUIAgentIntegrationTests(SimpleTestCase):
+    def test_empty_model_response_survives_real_graph_and_logs_error_id(self):
+        """Exercise Streamlit through the real LangGraph, without external services."""
+
+        completion = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        role="assistant",
+                        content="",
+                        tool_calls=None,
+                        reasoning="private model reasoning",
+                    ),
+                    finish_reason="length",
+                )
+            ],
+            model="test-model",
+            usage=SimpleNamespace(
+                prompt_tokens=100,
+                completion_tokens=4096,
+                total_tokens=4196,
+                completion_tokens_details=SimpleNamespace(reasoning_tokens=4096),
+            ),
+        )
+        with (
+            patch(
+                "customer_service.db_agent.config.DBAgentConfig.from_env",
+                return_value=DBAgentConfig(database_url="postgresql://unused"),
+            ),
+            patch(
+                "customer_service.llm.client.LLMConfig.from_env",
+                return_value=LLMConfig(
+                    model="test-model",
+                    base_url="http://model.invalid/v1",
+                    api_key="EMPTY",
+                ),
+            ),
+            patch("customer_service.llm.client.OpenAI") as openai_class,
+            patch(
+                "customer_service.db_agent.database.PostgresDatabaseAdapter.inspect_schema",
+                return_value=DatabaseSchema(tables={}),
+            ) as inspect_schema,
+            patch(
+                "customer_service.db_agent.database.PostgresDatabaseAdapter.execute_readonly_query"
+            ) as execute_query,
+            patch("customer_service.gui_logging.log_analysis_failure") as log_failure,
+        ):
+            create = openai_class.return_value.chat.completions.create
+            create.return_value = completion
+            app = AppTest.from_file(str(GUI_PATH)).run(timeout=10)
+            app.chat_input[0].set_value("Summarize sales").run(timeout=10)
+
+        self.assertEqual(list(app.exception), [])
+        self.assertEqual(len(app.error), 1)
+        self.assertIn(
+            "The analysis service did not respond as expected.", app.error[0].value
+        )
+        failure = app.session_state["conversation"][-1]
+        self.assertIsInstance(failure["error_id"], str)
+        self.assertEqual(len(failure["error_id"]), 8)
+        self.assertIn("finish_reason='length'", failure["error"])
+        self.assertIn("completion_tokens=4096", failure["error"])
+        self.assertIn("reasoning_tokens=4096", failure["error"])
+        self.assertNotIn("private model reasoning", failure["error"])
+        self.assertIn(
+            f"Error ID: {failure['error_id']}", [item.value for item in app.caption]
+        )
+        self.assertEqual(log_failure.call_count, 1)
+        logged_exception = log_failure.call_args.args[0]
+        self.assertIsInstance(logged_exception, LLMResponseError)
+        self.assertEqual(log_failure.call_args.kwargs["error_id"], failure["error_id"])
+        inspect_schema.assert_called_once()
+        execute_query.assert_not_called()
+        create.assert_called_once()
+        request = create.call_args.kwargs
+        self.assertEqual(request["max_tokens"], 4096)
+        self.assertEqual(
+            request["extra_body"],
+            {"chat_template_kwargs": {"enable_thinking": True}},
+        )

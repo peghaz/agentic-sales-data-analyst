@@ -1,3 +1,5 @@
+"""LLM client, configuration, and command tests."""
+
 import os
 from io import StringIO
 from types import SimpleNamespace
@@ -11,6 +13,7 @@ from customer_service.llm.client import (
     LLMConfig,
     LLMConfigurationError,
     LLMResponse,
+    LLMResponseError,
     OpenAILLMClient,
 )
 
@@ -18,7 +21,9 @@ from customer_service.llm.client import (
 class LLMConfigTests(SimpleTestCase):
     @patch.dict(os.environ, {}, clear=True)
     def test_requires_model_name(self):
-        with self.assertRaisesRegex(LLMConfigurationError, "LLM_MODEL_NAME must be set"):
+        with self.assertRaisesRegex(
+            LLMConfigurationError, "LLM_MODEL_NAME must be set"
+        ):
             LLMConfig.from_env()
 
     @patch.dict(
@@ -33,7 +38,11 @@ class LLMConfigTests(SimpleTestCase):
 
     @patch.dict(
         os.environ,
-        {"LLM_MODEL_NAME": "qwen-3.8-27b", "LLM_HOST": " 192.168.1.50 ", "LLM_PORT": " 9000 "},
+        {
+            "LLM_MODEL_NAME": "qwen-3.8-27b",
+            "LLM_HOST": " 192.168.1.50 ",
+            "LLM_PORT": " 9000 ",
+        },
         clear=True,
     )
     def test_builds_endpoint_from_remote_host_and_port(self):
@@ -70,6 +79,111 @@ class LLMConfigTests(SimpleTestCase):
 
 
 class OpenAILLMClientTests(SimpleTestCase):
+    @patch("customer_service.llm.client.OpenAI")
+    def test_empty_reasoning_only_reply_reports_safe_diagnostics(self, openai_class):
+        sdk_client = openai_class.return_value
+        sdk_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=None,
+                        reasoning_content="private model reasoning",
+                    ),
+                    finish_reason="length",
+                )
+            ],
+            model="test-model",
+            usage=SimpleNamespace(completion_tokens=1536),
+        )
+        config = LLMConfig(
+            model="test-model",
+            base_url="http://model.invalid/v1",
+            api_key="EMPTY",
+        )
+
+        with self.assertRaises(LLMResponseError) as caught:
+            OpenAILLMClient(config).ask("Question")
+
+        message = str(caught.exception)
+        self.assertIn("LLM returned empty response content", message)
+        self.assertIn("finish_reason='length'", message)
+        self.assertIn("completion_tokens=1536", message)
+        self.assertIn("reasoning_tokens=None", message)
+        self.assertIn("reasoning_present=True", message)
+        self.assertIn("DB_AGENT_MODEL_MAX_TOKENS", message)
+        self.assertNotIn("private model reasoning", message)
+        self.assertEqual(sdk_client.chat.completions.create.call_count, 1)
+
+    @patch("customer_service.llm.client.OpenAI")
+    def test_empty_reply_detects_vllm_reasoning_and_token_metadata(self, openai_class):
+        sdk_client = openai_class.return_value
+        sdk_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="",
+                        tool_calls=None,
+                        reasoning="private vLLM reasoning",
+                    ),
+                    finish_reason="length",
+                )
+            ],
+            model="test-model",
+            usage=SimpleNamespace(
+                completion_tokens=4096,
+                completion_tokens_details=SimpleNamespace(reasoning_tokens=4096),
+            ),
+        )
+        config = LLMConfig(
+            model="test-model",
+            base_url="http://model.invalid/v1",
+            api_key="EMPTY",
+        )
+
+        with self.assertRaises(LLMResponseError) as caught:
+            OpenAILLMClient(config).ask("Question")
+
+        message = str(caught.exception)
+        self.assertIn("after reaching the output-token limit", message)
+        self.assertIn("completion_tokens=4096", message)
+        self.assertIn("reasoning_tokens=4096", message)
+        self.assertIn("reasoning_present=True", message)
+        self.assertNotIn("private vLLM reasoning", message)
+        self.assertEqual(sdk_client.chat.completions.create.call_count, 1)
+
+    @patch("customer_service.llm.client.OpenAI")
+    def test_unparseable_tool_call_is_distinguished_from_empty_reply(
+        self, openai_class
+    ):
+        sdk_client = openai_class.return_value
+        sdk_client.chat.completions.create.return_value = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=None,
+                        tool_calls=[SimpleNamespace(id="call-1", function=None)],
+                    ),
+                    finish_reason="tool_calls",
+                )
+            ],
+            model="test-model",
+            usage=None,
+        )
+        config = LLMConfig(
+            model="test-model",
+            base_url="http://model.invalid/v1",
+            api_key="EMPTY",
+        )
+
+        with self.assertRaises(LLMResponseError) as caught:
+            OpenAILLMClient(config).ask("Question")
+
+        message = str(caught.exception)
+        self.assertIn("tool calls that could not be parsed", message)
+        self.assertIn("raw_tool_calls=1", message)
+        self.assertIn("finish_reason='tool_calls'", message)
+
     @patch("customer_service.llm.client.OpenAI")
     def test_completion_mode_sends_prompt_and_extracts_text(self, openai_class):
         sdk_client = openai_class.return_value
@@ -109,9 +223,7 @@ class OpenAILLMClientTests(SimpleTestCase):
         sdk_client = openai_class.return_value
         sdk_client.chat.completions.create.return_value = SimpleNamespace(
             choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content=" Chat response ")
-                )
+                SimpleNamespace(message=SimpleNamespace(content=" Chat response "))
             ],
             model="chat-model",
             usage=None,

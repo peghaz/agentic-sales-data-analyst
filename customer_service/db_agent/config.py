@@ -8,9 +8,7 @@ from urllib.parse import quote_plus
 
 
 def _parse_csv_names(value: str) -> tuple[str, ...]:
-    return tuple(
-        name.strip() for name in value.split(",") if name and name.strip()
-    )
+    return tuple(name.strip() for name in value.split(",") if name and name.strip())
 
 
 def _parse_int(name: str, default: int) -> int:
@@ -21,6 +19,30 @@ def _parse_int(name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _parse_positive_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer.") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer.")
+    return value
+
+
+def _parse_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be one of true, false, 1, 0, yes, no, on, or off.")
 
 
 def _build_database_url() -> str:
@@ -61,9 +83,11 @@ class DBAgentConfig:
     statement_timeout_ms: int = 10000
     max_tool_calls: int = 5
     query_retries: int = 2
+    model_max_tokens: int = 4096
+    enable_thinking: bool = True
 
     @classmethod
-    def from_env(cls) -> "DBAgentConfig":
+    def from_env(cls) -> DBAgentConfig:
         database_url = _build_database_url().strip()
         if not database_url:
             raise ValueError(
@@ -76,9 +100,7 @@ class DBAgentConfig:
         if not allowed_schemas:
             allowed_schemas = ("public",)
 
-        allowed_tables = _parse_csv_names(
-            os.getenv("DB_AGENT_ALLOWED_TABLES", "")
-        )
+        allowed_tables = _parse_csv_names(os.getenv("DB_AGENT_ALLOWED_TABLES", ""))
 
         return cls(
             database_url=database_url,
@@ -89,5 +111,6 @@ class DBAgentConfig:
             statement_timeout_ms=_parse_int("DB_AGENT_STATEMENT_TIMEOUT_MS", 10000),
             max_tool_calls=_parse_int("DB_AGENT_MAX_TOOL_CALLS", 5),
             query_retries=_parse_int("DB_AGENT_QUERY_RETRIES", 2),
+            model_max_tokens=_parse_positive_int("DB_AGENT_MODEL_MAX_TOKENS", 4096),
+            enable_thinking=_parse_bool("DB_AGENT_ENABLE_THINKING", True),
         )
-

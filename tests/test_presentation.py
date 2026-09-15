@@ -1,3 +1,5 @@
+"""Deterministic analysis-card and chart-selection tests."""
+
 from django.test import SimpleTestCase
 
 from customer_service.db_agent.presentation import charts_for_trace, metrics_for_traces

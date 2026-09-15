@@ -17,6 +17,7 @@ from customer_service.db_agent.presentation import (
     display_label,
     metrics_for_traces,
 )
+from customer_service.gui_logging import log_analysis_failure
 from customer_service.llm.client import LLMError, OpenAILLMClient
 
 load_dotenv()
@@ -286,6 +287,8 @@ def _run_question(question: str, *, force_query: bool = False) -> None:
                 }
             )
         except Exception as exc:  # noqa: BLE001 - UI boundary maps failures for users.
+            error_id = uuid4().hex[:8]
+            log_analysis_failure(exc, error_id=error_id)
             st.session_state.conversation.append(
                 {
                     "role": "assistant",
@@ -300,6 +303,7 @@ def _run_question(question: str, *, force_query: bool = False) -> None:
                     "allowed_rows": None,
                     "statement_timeout_ms": None,
                     "error": str(exc),
+                    "error_id": error_id,
                 }
             )
 
@@ -398,6 +402,8 @@ def _render_conversation() -> None:
         with st.chat_message("assistant"):
             if msg.get("error"):
                 st.error(msg["content"])
+                if msg.get("error_id"):
+                    st.caption(f"Error ID: {msg['error_id']}")
                 with st.expander("Debug detail", expanded=False):
                     st.caption(msg["error"])
             else:

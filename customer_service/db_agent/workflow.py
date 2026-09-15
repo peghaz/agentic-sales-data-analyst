@@ -73,6 +73,13 @@ def build_workflow(
 
     max_calls = max(1, config.max_tool_calls)
     tool_definitions = [tool_schema()]
+    model_options = {
+        "temperature": 0.0,
+        "max_tokens": config.model_max_tokens,
+        "extra_body": {
+            "chat_template_kwargs": {"enable_thinking": config.enable_thinking}
+        },
+    }
 
     def prepare(state: AgentState) -> dict[str, Any]:
         schema = adapter.inspect_schema(
@@ -115,8 +122,7 @@ def build_workflow(
                 else "auto"
             ),
             parallel_tool_calls=False,
-            temperature=0.0,
-            max_tokens=1536,
+            **model_options,
         )
         if not response.tool_calls and not response.content:
             raise DBAgentError(
@@ -165,8 +171,7 @@ def build_workflow(
             response = client.ask(
                 prompt="",
                 messages=messages,
-                temperature=0.0,
-                max_tokens=1536,
+                **model_options,
             )
         except LLMResponseError as exc:
             raise DBAgentError(

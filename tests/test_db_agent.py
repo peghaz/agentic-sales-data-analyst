@@ -1,7 +1,11 @@
+"""Read-only agent workflow and validation tests."""
+
 import json
+import os
 from datetime import date
 from decimal import Decimal
 from typing import Any
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
@@ -116,6 +120,66 @@ def _config(max_tool_calls: int) -> DBAgentConfig:
     )
 
 
+class DBAgentConfigTests(SimpleTestCase):
+    @patch.dict(
+        os.environ,
+        {"DB_AGENT_DATABASE_URL": "postgresql://unused"},
+        clear=True,
+    )
+    def test_model_defaults_keep_thinking_on_with_4096_token_budget(self):
+        config = DBAgentConfig.from_env()
+
+        self.assertEqual(config.model_max_tokens, 4096)
+        self.assertTrue(config.enable_thinking)
+
+    @patch.dict(
+        os.environ,
+        {
+            "DB_AGENT_DATABASE_URL": "postgresql://unused",
+            "DB_AGENT_MODEL_MAX_TOKENS": "8192",
+            "DB_AGENT_ENABLE_THINKING": "off",
+        },
+        clear=True,
+    )
+    def test_model_settings_can_be_overridden(self):
+        config = DBAgentConfig.from_env()
+
+        self.assertEqual(config.model_max_tokens, 8192)
+        self.assertFalse(config.enable_thinking)
+
+    def test_invalid_model_token_budget_is_rejected(self):
+        for value in ("0", "-1", "many"):
+            with (
+                self.subTest(value=value),
+                patch.dict(
+                    os.environ,
+                    {
+                        "DB_AGENT_DATABASE_URL": "postgresql://unused",
+                        "DB_AGENT_MODEL_MAX_TOKENS": value,
+                    },
+                    clear=True,
+                ),
+                self.assertRaisesRegex(
+                    ValueError, "DB_AGENT_MODEL_MAX_TOKENS must be a positive integer"
+                ),
+            ):
+                DBAgentConfig.from_env()
+
+    @patch.dict(
+        os.environ,
+        {
+            "DB_AGENT_DATABASE_URL": "postgresql://unused",
+            "DB_AGENT_ENABLE_THINKING": "sometimes",
+        },
+        clear=True,
+    )
+    def test_invalid_thinking_value_is_rejected(self):
+        with self.assertRaisesRegex(
+            ValueError, "DB_AGENT_ENABLE_THINKING must be one of"
+        ):
+            DBAgentConfig.from_env()
+
+
 class DBAgentLoopTests(SimpleTestCase):
     def test_tool_budget_allows_separate_final_answer_turn(self):
         client = _FakeClient(
@@ -140,6 +204,12 @@ class DBAgentLoopTests(SimpleTestCase):
             "tool-call budget of 2 has been used",
             client.calls[2]["messages"][-1]["content"],
         )
+        for call in client.calls:
+            self.assertEqual(call["max_tokens"], 4096)
+            self.assertEqual(
+                call["extra_body"],
+                {"chat_template_kwargs": {"enable_thinking": True}},
+            )
 
     def test_answer_before_budget_does_not_add_finalization_turn(self):
         client = _FakeClient(
