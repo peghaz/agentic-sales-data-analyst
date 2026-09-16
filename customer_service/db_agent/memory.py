@@ -50,10 +50,14 @@ def remember_turn(
 ) -> list[dict[str, str]]:
     """Keep only completed turns and a small sample of validated evidence."""
 
-    successful = [trace for trace in traces if not trace.error]
+    successful = [
+        trace for trace in traces if not trace.error and trace.stage == "result"
+    ]
     evidence = [
         {
             "purpose": trace.purpose,
+            "database": trace.database,
+            "stage": trace.stage,
             "sql": trace.sql[:2000],
             "row_count": trace.row_count,
             "truncated": trace.truncated,

@@ -1,0 +1,16 @@
+[[databases]]
+name = "customers"
+description = "Sales, customer, product, payment, shipment, and shop records."
+allowed_schemas = ["public"]
+allowed_tables = []
+
+
+# Declare cross-database relationships when this profile is used with multiple
+# databases. Endpoints use database.schema.table.column.
+#
+# [[relationships]]
+# name = "customer_identity"
+# left = "commerce.public.customers.id"
+# right = "support.crm.contacts.customer_id"
+# cardinality = "one-to-many"
+# description = "Connects commerce customers to their support interactions."

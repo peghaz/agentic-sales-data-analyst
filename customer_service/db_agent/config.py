@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from dataclasses import dataclass
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus, urlsplit, urlunsplit
+
+_DATABASE_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,62}$")
 
 
 def _parse_csv_names(value: str) -> tuple[str, ...]:
@@ -43,6 +47,33 @@ def _parse_bool(name: str, default: bool) -> bool:
     if raw in {"0", "false", "no", "off"}:
         return False
     raise ValueError(f"{name} must be one of true, false, 1, 0, yes, no, on, or off.")
+
+
+def _parse_database_names() -> tuple[str, ...]:
+    raw = os.getenv("DATABASES_AVAILABLE", "").strip()
+    if not raw:
+        return ()
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            "DATABASES_AVAILABLE must be a JSON list of database names."
+        ) from exc
+    if not isinstance(value, list) or not value:
+        raise ValueError("DATABASES_AVAILABLE must be a non-empty JSON list.")
+    names: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not _DATABASE_NAME.fullmatch(item):
+            raise ValueError(
+                "DATABASES_AVAILABLE entries must use lowercase letters, numbers, "
+                "hyphens, or underscores."
+            )
+        if item in names:
+            raise ValueError(f"DATABASES_AVAILABLE contains duplicate name {item!r}.")
+        names.append(item)
+    if len(names) > 25:
+        raise ValueError("DATABASES_AVAILABLE supports at most 25 databases.")
+    return tuple(names)
 
 
 def _build_database_url() -> str:
@@ -86,6 +117,34 @@ class DBAgentConfig:
     model_max_tokens: int = 4096
     enable_thinking: bool = True
     profile_name: str = "sales"
+    available_databases: tuple[str, ...] = ()
+    enforce_readonly_role: bool = True
+    schema_cache_ttl_seconds: int = 300
+    max_database_concurrency: int = 4
+    max_intermediate_rows: int = 10000
+    max_federated_bytes: int = 50000000
+
+    @property
+    def is_federated(self) -> bool:
+        return len(self.available_databases) > 1
+
+    def database_url_for(self, database: str) -> str:
+        """Return the configured PostgreSQL URL with an allowlisted database path."""
+
+        if self.available_databases and database not in self.available_databases:
+            raise ValueError(f"Database {database!r} is not in DATABASES_AVAILABLE.")
+        parsed = urlsplit(self.database_url)
+        if parsed.scheme not in {"postgres", "postgresql"}:
+            raise ValueError("DB_AGENT_DATABASE_URL must be a PostgreSQL URL.")
+        return urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                f"/{quote(database, safe='')}",
+                parsed.query,
+                "",
+            )
+        )
 
     @classmethod
     def from_env(cls) -> DBAgentConfig:
@@ -115,4 +174,18 @@ class DBAgentConfig:
             model_max_tokens=_parse_positive_int("DB_AGENT_MODEL_MAX_TOKENS", 4096),
             enable_thinking=_parse_bool("DB_AGENT_ENABLE_THINKING", True),
             profile_name=os.getenv("DB_AGENT_PROFILE", "sales").strip() or "sales",
+            available_databases=_parse_database_names(),
+            enforce_readonly_role=_parse_bool("DB_AGENT_ENFORCE_READONLY_ROLE", True),
+            schema_cache_ttl_seconds=_parse_positive_int(
+                "DB_AGENT_SCHEMA_CACHE_TTL_SECONDS", 300
+            ),
+            max_database_concurrency=_parse_positive_int(
+                "DB_AGENT_MAX_DATABASE_CONCURRENCY", 4
+            ),
+            max_intermediate_rows=_parse_positive_int(
+                "DB_AGENT_MAX_INTERMEDIATE_ROWS", 10000
+            ),
+            max_federated_bytes=_parse_positive_int(
+                "DB_AGENT_MAX_FEDERATED_BYTES", 50000000
+            ),
         )

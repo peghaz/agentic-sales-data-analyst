@@ -7,13 +7,11 @@ from dataclasses import replace
 
 from django.core.management.base import BaseCommand, CommandError
 
-from customer_service.db_agent.agent import DBAgent, DBAgentError
+from customer_service.db_agent.agent import DBAgentError
 from customer_service.db_agent.config import DBAgentConfig
-from customer_service.db_agent.database import (
-    DatabaseError,
-    PostgresDatabaseAdapter,
-)
-from customer_service.llm.client import LLMError, OpenAILLMClient
+from customer_service.db_agent.database import DatabaseError
+from customer_service.db_agent.runtime import build_agent_runtime
+from customer_service.llm.client import LLMError
 
 
 class Command(BaseCommand):
@@ -58,18 +56,13 @@ class Command(BaseCommand):
                     config,
                     max_tool_calls=options["max_tool_calls"],
                 )
-            client = OpenAILLMClient()
-            adapter = PostgresDatabaseAdapter(
-                dsn=config.database_url,
-                statement_timeout_ms=config.statement_timeout_ms,
-            )
-            agent = DBAgent(client=client, adapter=adapter, config=config)
-            result = agent.ask(question)
+            runtime = build_agent_runtime(config=config)
+            result = runtime.agent.ask(question)
         except (LLMError, DatabaseError, DBAgentError, ValueError) as exc:
             raise CommandError(str(exc)) from exc
 
         self.stdout.write(f"Model: {result.model}")
-        self.stdout.write(f"Endpoint: {client.config.base_url}")
+        self.stdout.write(f"Endpoint: {runtime.client.config.base_url}")
         if result.total_tokens is not None:
             self.stdout.write(
                 f"Token usage: prompt={result.prompt_tokens}, "
@@ -83,6 +76,9 @@ class Command(BaseCommand):
             for index, trace in enumerate(result.traces, start=1):
                 self.stdout.write("")
                 self.stdout.write(f"{index}. purpose: {trace.purpose or 'n/a'}")
+                if trace.database:
+                    self.stdout.write(f"   database: {trace.database}")
+                self.stdout.write(f"   stage: {trace.stage}")
                 self.stdout.write(
                     f"   rows: {trace.row_count} {'(truncated)' if trace.truncated else ''}"
                 )
@@ -96,6 +92,13 @@ class Command(BaseCommand):
                         self.stdout.write(
                             f"   sample: {json.dumps(preview, ensure_ascii=False)}"
                         )
+
+        if result.coverage:
+            self.stdout.write("")
+            self.stdout.write(self.style.WARNING("Data coverage:"))
+            for item in result.coverage:
+                detail = f" ({item.detail})" if item.detail else ""
+                self.stdout.write(f"- {item.database}: {item.status}{detail}")
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Answer:"))

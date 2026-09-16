@@ -13,6 +13,7 @@ from customer_service.llm.profile import DomainProfile, load_domain_profile
 
 from .config import DBAgentConfig
 from .database import DatabaseAdapter, DatabaseSchema
+from .gateway import DatabaseGateway, DatabaseTarget
 from .prompts import TOOL_NAME, build_system_prompt, tool_schema
 from .types import DBAgentError, DBAgentResult, QueryTrace
 from .workflow import build_workflow
@@ -26,12 +27,30 @@ class DBAgent:
     def __init__(
         self,
         client: OpenAILLMClient,
-        adapter: DatabaseAdapter,
+        adapter: DatabaseAdapter | None,
         config: DBAgentConfig,
         profile: DomainProfile | None = None,
+        *,
+        gateway: DatabaseGateway | None = None,
     ) -> None:
         self._config = config
         self._profile = profile or load_domain_profile(config.profile_name)
+        if gateway is None:
+            if adapter is None:
+                raise ValueError("Either adapter or gateway must be provided.")
+            source = self._profile.sources.databases[0]
+            target = DatabaseTarget(
+                name=source.name,
+                description=source.description,
+                allowed_schemas=config.allowed_schemas,
+                allowed_tables=config.allowed_tables,
+            )
+            gateway = DatabaseGateway(
+                {source.name: adapter},
+                {source.name: target},
+                cache_ttl_seconds=config.schema_cache_ttl_seconds,
+            )
+        self._gateway = gateway
         self._checkpointer = InMemorySaver(
             serde=JsonPlusSerializer(
                 allowed_msgpack_modules=[
@@ -40,11 +59,15 @@ class DBAgent:
                     ("customer_service.db_agent.database", "TableMeta"),
                     ("customer_service.db_agent.database", "DatabaseSchema"),
                     ("customer_service.db_agent.types", "QueryTrace"),
+                    ("customer_service.db_agent.types", "DatabaseCoverage"),
+                    ("customer_service.db_agent.gateway", "DatabaseTarget"),
+                    ("customer_service.db_agent.gateway", "FederatedCatalog"),
+                    ("customer_service.llm.profile", "DatabaseRelationship"),
                 ]
             )
         )
         self._graph = build_workflow(
-            client, adapter, config, self._profile, self._checkpointer
+            client, self._gateway, config, self._profile, self._checkpointer
         )
 
     def ask(
@@ -65,7 +88,7 @@ class DBAgent:
             {"question": question.strip(), "force_query": force_query},
             config={
                 "configurable": {"thread_id": thread_id or uuid4().hex},
-                "recursion_limit": 2 * max(1, self._config.max_tool_calls) + 8,
+                "recursion_limit": 2 * max(1, self._config.max_tool_calls) + 14,
             },
         )
         return DBAgentResult(
@@ -76,6 +99,7 @@ class DBAgent:
             completion_tokens=state["completion_tokens"],
             total_tokens=state["total_tokens"],
             traces=state["traces"],
+            coverage=state["coverage"],
         )
 
     def _build_system_prompt(self, schema: DatabaseSchema) -> str:

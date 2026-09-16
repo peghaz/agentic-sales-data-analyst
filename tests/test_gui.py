@@ -13,6 +13,7 @@ from streamlit.testing.v1 import AppTest
 from customer_service.db_agent.agent import DBAgentResult, QueryTrace
 from customer_service.db_agent.config import DBAgentConfig
 from customer_service.db_agent.database import DatabaseSchema
+from customer_service.db_agent.types import DatabaseCoverage
 from customer_service.llm.client import LLMConfig, LLMResponseError
 from customer_service.llm.profile import (
     DomainProfileError,
@@ -23,7 +24,9 @@ from customer_service.llm.profile import (
 GUI_PATH = Path(__file__).resolve().parents[1] / "gui.py"
 
 
-def _assistant_turn(traces: list[QueryTrace]) -> dict[str, Any]:
+def _assistant_turn(
+    traces: list[QueryTrace], coverage: list[DatabaseCoverage] | None = None
+) -> dict[str, Any]:
     return {
         "role": "assistant",
         "content": "## Sales summary\n\nThe analysis completed.",
@@ -35,6 +38,7 @@ def _assistant_turn(traces: list[QueryTrace]) -> dict[str, Any]:
         "completion_tokens": 1,
         "total_tokens": 2,
         "error": None,
+        "coverage": coverage or [],
     }
 
 
@@ -133,6 +137,48 @@ class GUIDomainProfileTests(SimpleTestCase):
 
 
 class GUITraceRenderingTests(SimpleTestCase):
+    def test_federated_answer_shows_coverage_and_only_final_data(self):
+        source = QueryTrace(
+            sql="SELECT customer_id, revenue FROM public.orders",
+            purpose="Combined summary",
+            row_count=2,
+            truncated=False,
+            columns=("customer_id", "revenue"),
+            rows=[{"customer_id": 1, "revenue": "10.00"}],
+            database="sales",
+            result_name="sales_rows",
+            stage="source",
+        )
+        result = QueryTrace(
+            sql="SELECT sum(revenue) AS revenue FROM sales_rows",
+            purpose="Combined summary",
+            row_count=1,
+            truncated=False,
+            columns=("revenue",),
+            rows=[{"revenue": "10.00"}],
+            result_name="final_result",
+            stage="result",
+        )
+        coverage = [
+            DatabaseCoverage("sales", "used"),
+            DatabaseCoverage("support", "unavailable", "connection timed out"),
+        ]
+        app = AppTest.from_file(str(GUI_PATH)).run(timeout=10)
+        app.session_state["conversation"] = [
+            _assistant_turn([source, result], coverage)
+        ]
+        app = app.run(timeout=10)
+
+        self.assertEqual(list(app.exception), [])
+        self.assertEqual(len(app.dataframe), 1)
+        self.assertIn(
+            "This answer is incomplete because these data sources were unavailable: support.",
+            [warning.value for warning in app.warning],
+        )
+        markdown = [item.value for item in app.markdown]
+        self.assertIn("**Step 1** · sales · 2 rows", markdown)
+        self.assertIn("**Data coverage**", markdown)
+
     def test_monthly_results_show_chart_and_readable_table_headers(self):
         trace = QueryTrace(
             sql="SELECT month, revenue FROM sales",

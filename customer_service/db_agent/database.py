@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Iterable
+from threading import Lock
+from typing import Any
 
 import psycopg2
 
@@ -25,6 +28,10 @@ class DatabaseExecutionError(DatabaseError):
 
 class DatabaseIntrospectionError(DatabaseError):
     """Raised when schema discovery fails."""
+
+
+class ReadOnlyRoleError(DatabaseError):
+    """Raised when database credentials can mutate the configured source."""
 
 
 @dataclass(frozen=True)
@@ -90,7 +97,9 @@ class DatabaseSchema:
 
     def find_by_name(self, table: str) -> list[TableMeta]:
         table = table.lower()
-        return [t for key, t in self.tables.items() if key.split(".", 1)[1].lower() == table]
+        return [
+            t for key, t in self.tables.items() if key.split(".", 1)[1].lower() == table
+        ]
 
     @property
     def sorted_table_names(self) -> list[str]:
@@ -135,9 +144,186 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
         self,
         dsn: str,
         statement_timeout_ms: int = 10000,
+        *,
+        enforce_readonly_role: bool = True,
     ) -> None:
         self._dsn = dsn
         self._statement_timeout_ms = statement_timeout_ms
+        self._enforce_readonly_role = enforce_readonly_role
+        self._role_audited = False
+        self._audit_lock = Lock()
+
+    @contextmanager
+    def _readonly_connection(self) -> Iterator[Any]:
+        connection = None
+        try:
+            connection = psycopg2.connect(self._dsn)
+            connection.set_session(readonly=True, autocommit=False)
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW transaction_read_only")
+                row = cursor.fetchone()
+                if not row or str(row[0]).lower() not in {"on", "true", "1"}:
+                    raise ReadOnlyRoleError(
+                        "PostgreSQL did not confirm a read-only transaction."
+                    )
+                cursor.execute(
+                    "SET LOCAL statement_timeout = %s",
+                    (self._statement_timeout_ms,),
+                )
+                if self._enforce_readonly_role and not self._role_audited:
+                    with self._audit_lock:
+                        if not self._role_audited:
+                            self._audit_role(cursor)
+                            self._role_audited = True
+            yield connection
+        finally:
+            if connection is not None:
+                try:
+                    connection.rollback()
+                finally:
+                    connection.close()
+
+    @staticmethod
+    def _audit_role(cursor: Any) -> None:
+        cursor.execute(
+            """
+            SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls
+            FROM pg_roles
+            WHERE rolname = current_user
+            """
+        )
+        role_flags = cursor.fetchone()
+        if not role_flags or any(role_flags):
+            raise ReadOnlyRoleError(
+                "DB agent credentials must use a non-privileged, SELECT-only role."
+            )
+
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_roles
+                WHERE rolname = ANY(%s)
+                  AND pg_has_role(current_user, oid, 'MEMBER')
+            )
+            """,
+            (
+                [
+                    "pg_execute_server_program",
+                    "pg_read_server_files",
+                    "pg_signal_backend",
+                    "pg_write_all_data",
+                    "pg_write_server_files",
+                ],
+            ),
+        )
+        if cursor.fetchone()[0]:
+            raise ReadOnlyRoleError(
+                "DB agent credentials must not inherit server-file, program-execution, "
+                "or backend-signaling roles."
+            )
+
+        cursor.execute(
+            """
+            SELECT
+                has_database_privilege(current_user, current_database(), 'CREATE')
+                OR has_database_privilege(current_user, current_database(), 'TEMP')
+            """
+        )
+        if cursor.fetchone()[0]:
+            raise ReadOnlyRoleError(
+                "DB agent credentials must not have CREATE or TEMP database privileges."
+            )
+
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_namespace
+                WHERE nspname <> 'information_schema'
+                  AND left(nspname, 3) <> 'pg_'
+                  AND has_schema_privilege(current_user, oid, 'CREATE')
+            )
+            """
+        )
+        if cursor.fetchone()[0]:
+            raise ReadOnlyRoleError(
+                "DB agent credentials must not have CREATE privileges on user schemas."
+            )
+
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_class AS relation
+                JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+                WHERE namespace.nspname <> 'information_schema'
+                  AND left(namespace.nspname, 3) <> 'pg_'
+                  AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
+                  AND (
+                      has_table_privilege(
+                          current_user,
+                          relation.oid,
+                          'INSERT'
+                      )
+                      OR has_table_privilege(
+                          current_user,
+                          relation.oid,
+                          'UPDATE'
+                      )
+                      OR has_table_privilege(
+                          current_user,
+                          relation.oid,
+                          'DELETE'
+                      )
+                      OR has_table_privilege(
+                          current_user,
+                          relation.oid,
+                          'TRUNCATE'
+                      )
+                      OR has_table_privilege(
+                          current_user,
+                          relation.oid,
+                          'TRIGGER'
+                      )
+                      OR has_table_privilege(current_user, relation.oid, 'REFERENCES')
+                  )
+            )
+            """
+        )
+        if cursor.fetchone()[0]:
+            raise ReadOnlyRoleError(
+                "DB agent credentials have mutation privileges on a user table or view."
+            )
+
+        cursor.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1
+                FROM pg_class AS sequence
+                JOIN pg_namespace AS namespace ON namespace.oid = sequence.relnamespace
+                WHERE namespace.nspname <> 'information_schema'
+                  AND left(namespace.nspname, 3) <> 'pg_'
+                  AND sequence.relkind = 'S'
+                  AND (
+                      has_sequence_privilege(
+                          current_user,
+                          sequence.oid,
+                          'USAGE'
+                      )
+                      OR has_sequence_privilege(
+                          current_user,
+                          sequence.oid,
+                          'UPDATE'
+                      )
+                  )
+            )
+            """
+        )
+        if cursor.fetchone()[0]:
+            raise ReadOnlyRoleError(
+                "DB agent credentials must not have USAGE or UPDATE on sequences."
+            )
 
     def inspect_schema(
         self,
@@ -151,7 +337,7 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
         allowed_table_set = {table.lower() for table in (allowed_tables or ()) if table}
 
         try:
-            with psycopg2.connect(self._dsn) as connection:
+            with self._readonly_connection() as connection:  # noqa: SIM117
                 with connection.cursor() as cursor:
                     cursor.execute(
                         """
@@ -271,13 +457,8 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
     def execute_readonly_query(self, sql: str, max_rows: int) -> QueryResult:
         bounded_sql = self._bounded_sql(sql, max_rows)
         try:
-            with psycopg2.connect(self._dsn) as connection:
+            with self._readonly_connection() as connection:  # noqa: SIM117
                 with connection.cursor() as cursor:
-                    cursor.execute(
-                        "SET LOCAL statement_timeout = %s",
-                        (self._statement_timeout_ms,),
-                    )
-                    cursor.execute("SET LOCAL transaction_read_only = on")
                     cursor.execute(bounded_sql)
                     if cursor.description is None:
                         return QueryResult(
@@ -293,7 +474,9 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
             raise DatabaseExecutionError(str(exc)) from exc
 
         normalized_rows = [self._normalize_row(columns, row) for row in rows]
-        truncated = max_rows > 0 and len(normalized_rows) >= max_rows
+        truncated = max_rows > 0 and len(normalized_rows) > max_rows
+        if truncated:
+            normalized_rows = normalized_rows[:max_rows]
         return QueryResult(
             sql=sql,
             columns=columns,
@@ -306,7 +489,7 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
     def _bounded_sql(sql: str, max_rows: int) -> str:
         if not max_rows or max_rows <= 0:
             return sql
-        return f"SELECT * FROM ({sql}) AS _agent_result LIMIT {int(max_rows)}"
+        return f"SELECT * FROM ({sql}) AS _agent_result LIMIT {int(max_rows) + 1}"
 
     def _build_schema_catalog(
         self,
@@ -384,7 +567,13 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
 
         # Fill unique constraints
         unique_map: dict[str, list[tuple[str, ...]]] = {}
-        for table_schema, table_name, constraint_name, column_name, _ordinal in unique_rows:
+        for (
+            table_schema,
+            table_name,
+            constraint_name,
+            column_name,
+            _ordinal,
+        ) in unique_rows:
             key = f"{table_schema}.{table_name}"
             if key not in tables:
                 continue
@@ -459,7 +648,9 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
         return DatabaseSchema(tables=tables)
 
     @staticmethod
-    def _normalize_row(columns: tuple[str, ...], row: tuple[Any, ...]) -> dict[str, Any]:
+    def _normalize_row(
+        columns: tuple[str, ...], row: tuple[Any, ...]
+    ) -> dict[str, Any]:
         normalized = {}
         for key, value in zip(columns, row, strict=False):
             normalized[key] = PostgresDatabaseAdapter._normalize_value(value)
@@ -475,10 +666,7 @@ class PostgresDatabaseAdapter(DatabaseAdapter):
                 for key, item in value.items()
             }
         if isinstance(value, (list, tuple)):
-            return [
-                PostgresDatabaseAdapter._normalize_value(item)
-                for item in value
-            ]
+            return [PostgresDatabaseAdapter._normalize_value(item) for item in value]
         if isinstance(value, Decimal):
             return str(value)
         if isinstance(value, (datetime, date)):

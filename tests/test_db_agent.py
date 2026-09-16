@@ -6,8 +6,9 @@ from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from io import StringIO
+from types import SimpleNamespace
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.core.management import call_command
 from django.test import SimpleTestCase
@@ -473,19 +474,21 @@ class DBAskCommandTests(SimpleTestCase):
                 return_value=original,
             ),
             patch(
-                "customer_service.management.commands.db_ask.OpenAILLMClient"
-            ) as client_class,
-            patch(
-                "customer_service.management.commands.db_ask.PostgresDatabaseAdapter"
-            ),
-            patch("customer_service.management.commands.db_ask.DBAgent") as agent_class,
+                "customer_service.management.commands.db_ask.build_agent_runtime"
+            ) as build_runtime,
         ):
-            client_class.return_value.config.base_url = "http://model.invalid/v1"
-            agent_class.return_value.ask.return_value = DBAgentResult(
+            agent = MagicMock()
+            agent.ask.return_value = DBAgentResult(
                 answer="Done",
                 model="test-model",
                 latency_ms=1.0,
                 traces=[],
+            )
+            build_runtime.return_value = SimpleNamespace(
+                client=SimpleNamespace(
+                    config=SimpleNamespace(base_url="http://model.invalid/v1")
+                ),
+                agent=agent,
             )
             call_command(
                 "db_ask",
@@ -495,7 +498,7 @@ class DBAskCommandTests(SimpleTestCase):
                 stdout=StringIO(),
             )
 
-        overridden = agent_class.call_args.kwargs["config"]
+        overridden = build_runtime.call_args.kwargs["config"]
         self.assertEqual(overridden.max_rows, 25)
         self.assertEqual(overridden.max_tool_calls, 2)
         self.assertEqual(overridden.model_max_tokens, 8192)

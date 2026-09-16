@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 
 class DBAgentError(Exception):
@@ -21,6 +21,18 @@ class QueryTrace:
     columns: tuple[str, ...]
     rows: list[dict[str, Any]]
     error: str | None = None
+    database: str | None = None
+    result_name: str | None = None
+    stage: Literal["source", "result"] = "result"
+
+
+@dataclass(frozen=True)
+class DatabaseCoverage:
+    """Availability and usage state for one configured database."""
+
+    database: str
+    status: Literal["used", "available", "unavailable"]
+    detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -34,3 +46,4 @@ class DBAgentResult:
     completion_tokens: int | None = None
     total_tokens: int | None = None
     traces: list[QueryTrace] | None = None
+    coverage: list[DatabaseCoverage] | None = None

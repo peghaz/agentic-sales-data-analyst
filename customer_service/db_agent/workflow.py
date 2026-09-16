@@ -11,11 +11,13 @@ from customer_service.llm.client import LLMResponse, LLMResponseError, OpenAILLM
 from customer_service.llm.profile import DomainProfile
 
 from .config import DBAgentConfig
-from .database import DatabaseAdapter, DatabaseSchema
+from .database import DatabaseSchema
+from .federation import FederatedQueryService
+from .gateway import DatabaseGateway, FederatedCatalog
 from .memory import evidence_message, history_messages, remember_turn
-from .prompts import build_system_prompt, final_answer_instruction, tool_schema
+from .prompts import build_system_prompt, final_answer_instruction, tool_schemas
 from .query_tool import execute_tool_calls
-from .types import DBAgentError, QueryTrace
+from .types import DatabaseCoverage, DBAgentError, QueryTrace
 
 
 class AgentState(TypedDict, total=False):
@@ -24,10 +26,12 @@ class AgentState(TypedDict, total=False):
     question: str
     force_query: bool
     history: list[dict[str, str]]
-    schema: DatabaseSchema
+    catalog: DatabaseSchema | FederatedCatalog
+    source_catalog: FederatedCatalog
     messages: list[dict[str, Any]]
     traces: list[QueryTrace]
     tool_calls_used: int
+    metadata_calls: int
     attempts: int
     latency_ms: float
     prompt_tokens: int | None
@@ -36,6 +40,9 @@ class AgentState(TypedDict, total=False):
     pending_tool_calls: list[dict[str, Any]]
     answer: str
     model: str
+    used_databases: set[str]
+    source_failures: dict[str, str]
+    coverage: list[DatabaseCoverage]
 
 
 def _add_usage(current: int | None, incoming: int | None) -> int | None:
@@ -66,7 +73,7 @@ def _response_updates(state: AgentState, response: LLMResponse) -> dict[str, Any
 
 def build_workflow(
     client: OpenAILLMClient,
-    adapter: DatabaseAdapter,
+    gateway: DatabaseGateway,
     config: DBAgentConfig,
     profile: DomainProfile,
     checkpointer: InMemorySaver,
@@ -74,7 +81,12 @@ def build_workflow(
     """Compile an explicit model → validated query → answer workflow."""
 
     max_calls = max(1, config.max_tool_calls)
-    tool_definitions = [tool_schema()]
+    federation = FederatedQueryService(
+        gateway,
+        max_intermediate_rows=config.max_intermediate_rows,
+        max_federated_bytes=config.max_federated_bytes,
+        max_concurrency=config.max_database_concurrency,
+    )
     model_options = {
         "temperature": 0.0,
         "max_tokens": config.model_max_tokens,
@@ -84,15 +96,17 @@ def build_workflow(
     }
 
     def prepare(state: AgentState) -> dict[str, Any]:
-        schema = adapter.inspect_schema(
-            allowed_schemas=config.allowed_schemas,
-            allowed_tables=config.allowed_tables,
+        source_catalog = gateway.inspect_catalog()
+        catalog: DatabaseSchema | FederatedCatalog = (
+            source_catalog
+            if gateway.is_federated
+            else source_catalog.schemas[gateway.default_database]
         )
         history = state.get("history", [])
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
-                "content": build_system_prompt(schema, config, profile),
+                "content": build_system_prompt(catalog, config, profile),
             }
         ]
         messages.extend(history_messages(history))
@@ -101,10 +115,12 @@ def build_workflow(
             messages.append({"role": "user", "content": evidence})
         messages.append({"role": "user", "content": state["question"]})
         return {
-            "schema": schema,
+            "catalog": catalog,
+            "source_catalog": source_catalog,
             "messages": messages,
             "traces": [],
             "tool_calls_used": 0,
+            "metadata_calls": 0,
             "attempts": 0,
             "latency_ms": 0.0,
             "prompt_tokens": None,
@@ -113,13 +129,16 @@ def build_workflow(
             "pending_tool_calls": [],
             "answer": "",
             "model": "",
+            "used_databases": set(),
+            "source_failures": {},
+            "coverage": source_catalog.coverage(),
         }
 
     def model(state: AgentState) -> dict[str, Any]:
         response = client.ask(
             prompt="",
             messages=state["messages"],
-            tools=tool_definitions,
+            tools=tool_schemas(state["catalog"]),
             tool_choice=(
                 "required"
                 if state["tool_calls_used"] == 0
@@ -150,18 +169,28 @@ def build_workflow(
     def query(state: AgentState) -> dict[str, Any]:
         batch = execute_tool_calls(
             state["pending_tool_calls"],
-            schema=state["schema"],
-            adapter=adapter,
+            catalog=state["catalog"],
+            gateway=gateway,
+            federation=federation,
             config=config,
             calls_used=state["tool_calls_used"],
+            metadata_calls=state["metadata_calls"],
             attempts=state["attempts"],
+            used_databases=state["used_databases"],
+            source_failures=state["source_failures"],
         )
         return {
             "messages": [*state["messages"], *batch.messages],
             "traces": [*state["traces"], *batch.traces],
             "tool_calls_used": batch.calls_used,
+            "metadata_calls": batch.metadata_calls,
             "attempts": batch.attempts,
             "pending_tool_calls": [],
+            "used_databases": batch.used_databases,
+            "source_failures": batch.source_failures,
+            "coverage": state["source_catalog"].coverage(
+                batch.used_databases, batch.source_failures
+            ),
         }
 
     def route_query(state: AgentState) -> Literal["model", "finalize"]:

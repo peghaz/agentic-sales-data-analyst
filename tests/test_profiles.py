@@ -53,6 +53,15 @@ wildlife data
 """,
         encoding="utf-8",
     )
+    (directory / "sources.toml").write_text(
+        """[[databases]]
+name = "animals"
+description = "Wildlife population observations."
+allowed_schemas = ["public"]
+allowed_tables = ["observations", "species"]
+""",
+        encoding="utf-8",
+    )
     return directory
 
 
@@ -65,6 +74,7 @@ class DomainProfileTests(SimpleTestCase):
         self.assertIn("sales data analyst", profile.agent_instructions)
         self.assertEqual(profile.example_categories[0].label, "Executive")
         self.assertIn("revenue", profile.presentation.metric_words)
+        self.assertEqual(profile.sources.databases[0].name, "dbagent")
 
     def test_alternate_profile_loads_utf8_content_and_wrapped_examples(self):
         with TemporaryDirectory() as temp_dir:
@@ -91,6 +101,9 @@ class DomainProfileTests(SimpleTestCase):
             ),
         )
         self.assertEqual(profile.presentation.category_words, ("species", "habitat"))
+        self.assertEqual(
+            profile.sources.databases[0].allowed_tables, ("observations", "species")
+        )
 
     def test_rejects_unsafe_or_unknown_profile_names(self):
         with TemporaryDirectory() as temp_dir:
@@ -141,3 +154,43 @@ population
 
                 with self.assertRaisesRegex(DomainProfileError, error):
                     load_domain_profile("animals", config_root=root)
+
+    def test_rejects_relationship_to_an_undeclared_database(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            directory = _write_profile(root)
+            (directory / "sources.toml").write_text(
+                """[[databases]]
+name = "animals"
+description = "Wildlife population observations."
+allowed_schemas = ["public"]
+
+[[relationships]]
+name = "unknown_source"
+left = "animals.public.observations.species_id"
+right = "habitats.public.species.id"
+cardinality = "many-to-one"
+description = "Invalid undeclared source."
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(DomainProfileError, "declared database"):
+                load_domain_profile("animals", config_root=root)
+
+    def test_rejects_unknown_source_configuration_fields(self):
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            directory = _write_profile(root)
+            (directory / "sources.toml").write_text(
+                """[[databases]]
+name = "animals"
+description = "Wildlife population observations."
+allowed_schemas = ["public"]
+allow_tables = ["observations"]
+""",
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(DomainProfileError, "allow_tables"):
+                load_domain_profile("animals", config_root=root)

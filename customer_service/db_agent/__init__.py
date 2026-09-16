@@ -10,19 +10,27 @@ from .database import (
     DatabaseSchema,
     PostgresDatabaseAdapter,
     QueryResult,
+    ReadOnlyRoleError,
 )
+from .gateway import DatabaseGateway, FederatedCatalog, build_database_gateway
+from .types import DatabaseCoverage
 
 __all__ = [
     "DBAgent",
     "DBAgentConfig",
     "DBAgentError",
     "DBAgentResult",
-    "QueryTrace",
     "DatabaseAdapter",
+    "DatabaseCoverage",
     "DatabaseError",
     "DatabaseExecutionError",
+    "DatabaseGateway",
     "DatabaseIntrospectionError",
     "DatabaseSchema",
+    "FederatedCatalog",
     "PostgresDatabaseAdapter",
     "QueryResult",
+    "QueryTrace",
+    "ReadOnlyRoleError",
+    "build_database_gateway",
 ]

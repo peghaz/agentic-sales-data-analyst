@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -46,6 +47,38 @@ class PresentationHints:
 
 
 @dataclass(frozen=True)
+class DatabaseSourceProfile:
+    """One named database and its allowed analytical surface."""
+
+    name: str
+    description: str
+    allowed_schemas: tuple[str, ...]
+    allowed_tables: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DatabaseRelationship:
+    """Declared semantic relationship between columns in two databases."""
+
+    name: str
+    left: str
+    right: str
+    cardinality: str
+    description: str
+
+
+@dataclass(frozen=True)
+class SourceProfile:
+    """Machine-readable database topology for a domain profile."""
+
+    databases: tuple[DatabaseSourceProfile, ...]
+    relationships: tuple[DatabaseRelationship, ...]
+
+    def database(self, name: str) -> DatabaseSourceProfile | None:
+        return next((source for source in self.databases if source.name == name), None)
+
+
+@dataclass(frozen=True)
 class DomainProfile:
     """Runtime content and presentation configuration for one analytical domain."""
 
@@ -60,6 +93,7 @@ class DomainProfile:
     agent_instructions: str
     example_categories: tuple[PromptCategory, ...]
     presentation: PresentationHints
+    sources: SourceProfile
 
 
 def _read(path: Path) -> str:
@@ -166,6 +200,139 @@ def _parse_examples(text: str, path: Path) -> tuple[PromptCategory, ...]:
     return tuple(categories)
 
 
+def _string_list(value: object, field: str, path: Path) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(
+        isinstance(item, str) and item.strip() for item in value
+    ):
+        raise DomainProfileError(f"{field} in {path} must be a list of strings.")
+    values = tuple(dict.fromkeys(item.strip() for item in value))
+    return values
+
+
+def _required_string(payload: dict[str, object], field: str, path: Path) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise DomainProfileError(f"{field} in {path} must be a non-empty string.")
+    return value.strip()
+
+
+def _reject_unknown_keys(
+    payload: dict[str, object],
+    allowed: set[str],
+    path: Path,
+    context: str,
+) -> None:
+    unknown = sorted(set(payload) - allowed)
+    if unknown:
+        raise DomainProfileError(
+            f"Unknown field(s) in {context} of {path}: {', '.join(unknown)}"
+        )
+
+
+def _load_sources(path: Path) -> SourceProfile:
+    try:
+        payload = tomllib.loads(_read(path))
+    except tomllib.TOMLDecodeError as exc:
+        raise DomainProfileError(f"Invalid TOML in {path}: {exc}") from exc
+    _reject_unknown_keys(payload, {"databases", "relationships"}, path, "root")
+
+    raw_databases = payload.get("databases")
+    if not isinstance(raw_databases, list) or not raw_databases:
+        raise DomainProfileError(
+            f"{path} must define at least one [[databases]] entry."
+        )
+
+    databases: list[DatabaseSourceProfile] = []
+    names: set[str] = set()
+    for raw_source in raw_databases:
+        if not isinstance(raw_source, dict):
+            raise DomainProfileError(
+                f"Each [[databases]] entry in {path} must be a table."
+            )
+        _reject_unknown_keys(
+            raw_source,
+            {"name", "description", "allowed_schemas", "allowed_tables"},
+            path,
+            "[[databases]] entry",
+        )
+        name = _required_string(raw_source, "name", path)
+        if not _PROFILE_NAME.fullmatch(name):
+            raise DomainProfileError(
+                f"Database name {name!r} in {path} must contain only lowercase "
+                "letters, numbers, hyphens, or underscores."
+            )
+        if name in names:
+            raise DomainProfileError(f"Duplicate database name {name!r} in {path}.")
+        names.add(name)
+        schemas = _string_list(
+            raw_source.get("allowed_schemas"), "allowed_schemas", path
+        )
+        if not schemas:
+            raise DomainProfileError(
+                f"Database {name!r} in {path} must allow at least one schema."
+            )
+        raw_tables = raw_source.get("allowed_tables", [])
+        tables = _string_list(raw_tables, "allowed_tables", path) if raw_tables else ()
+        databases.append(
+            DatabaseSourceProfile(
+                name=name,
+                description=_required_string(raw_source, "description", path),
+                allowed_schemas=schemas,
+                allowed_tables=tables,
+            )
+        )
+
+    relationships: list[DatabaseRelationship] = []
+    relationship_names: set[str] = set()
+    raw_relationships = payload.get("relationships", [])
+    if not isinstance(raw_relationships, list):
+        raise DomainProfileError(f"relationships in {path} must be an array of tables.")
+    for raw_relationship in raw_relationships:
+        if not isinstance(raw_relationship, dict):
+            raise DomainProfileError(
+                f"Each [[relationships]] entry in {path} must be a table."
+            )
+        _reject_unknown_keys(
+            raw_relationship,
+            {"name", "left", "right", "cardinality", "description"},
+            path,
+            "[[relationships]] entry",
+        )
+        name = _required_string(raw_relationship, "name", path)
+        if name in relationship_names:
+            raise DomainProfileError(f"Duplicate relationship name {name!r} in {path}.")
+        relationship_names.add(name)
+        left = _required_string(raw_relationship, "left", path)
+        right = _required_string(raw_relationship, "right", path)
+        for endpoint in (left, right):
+            parts = endpoint.split(".")
+            if len(parts) != 4 or parts[0] not in names or not all(parts):
+                raise DomainProfileError(
+                    f"Relationship endpoint {endpoint!r} in {path} must be "
+                    "database.schema.table.column and reference a declared database."
+                )
+        cardinality = _required_string(raw_relationship, "cardinality", path)
+        if cardinality not in {
+            "one-to-one",
+            "one-to-many",
+            "many-to-one",
+            "many-to-many",
+        }:
+            raise DomainProfileError(
+                f"Unsupported cardinality {cardinality!r} in {path}."
+            )
+        relationships.append(
+            DatabaseRelationship(
+                name=name,
+                left=left,
+                right=right,
+                cardinality=cardinality,
+                description=_required_string(raw_relationship, "description", path),
+            )
+        )
+    return SourceProfile(tuple(databases), tuple(relationships))
+
+
 def _load_profile(name: str, root: Path) -> DomainProfile:
     if not _PROFILE_NAME.fullmatch(name):
         raise DomainProfileError(
@@ -216,6 +383,7 @@ def _load_profile(name: str, root: Path) -> DomainProfile:
                 presentation_path,
             ),
         ),
+        sources=_load_sources(directory / "sources.toml"),
     )
 
 

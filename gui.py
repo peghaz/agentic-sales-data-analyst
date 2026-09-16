@@ -10,14 +10,20 @@ from uuid import uuid4
 import streamlit as st
 from dotenv import load_dotenv
 
-from customer_service.db_agent import DBAgent, DBAgentError, QueryTrace
+from customer_service.db_agent import (
+    DatabaseCoverage,
+    DBAgent,
+    DBAgentError,
+    QueryTrace,
+)
 from customer_service.db_agent.config import DBAgentConfig
-from customer_service.db_agent.database import DatabaseError, PostgresDatabaseAdapter
+from customer_service.db_agent.database import DatabaseError, ReadOnlyRoleError
 from customer_service.db_agent.presentation import (
     charts_for_trace,
     display_label,
     metrics_for_traces,
 )
+from customer_service.db_agent.runtime import build_agent_runtime
 from customer_service.gui_logging import log_analysis_failure
 from customer_service.llm.client import LLMError, OpenAILLMClient
 from customer_service.llm.profile import (
@@ -65,6 +71,7 @@ def _initial_conversation() -> list[dict[str, Any]]:
             "completion_tokens": None,
             "total_tokens": None,
             "error": None,
+            "coverage": [],
         }
     ]
 
@@ -74,6 +81,11 @@ def _format_error_for_user(exc: Exception) -> str:
         return (
             "The analysis service did not respond as expected. "
             "Please retry, or contact an administrator if it continues."
+        )
+    if isinstance(exc, ReadOnlyRoleError):
+        return (
+            "The configured database credentials are not strictly read-only. "
+            "Ask an administrator to use a dedicated SELECT-only role."
         )
     if isinstance(exc, DatabaseError):
         return (
@@ -88,19 +100,8 @@ def _format_error_for_user(exc: Exception) -> str:
 
 
 def _build_runtime() -> tuple[OpenAILLMClient, DBAgent, DBAgentConfig]:
-    config = DBAgentConfig.from_env()
-    client = OpenAILLMClient()
-    adapter = PostgresDatabaseAdapter(
-        dsn=config.database_url,
-        statement_timeout_ms=config.statement_timeout_ms,
-    )
-    agent = DBAgent(
-        client=client,
-        adapter=adapter,
-        config=config,
-        profile=ACTIVE_PROFILE,
-    )
-    return client, agent, config
+    runtime = build_agent_runtime(profile=ACTIVE_PROFILE)
+    return runtime.client, runtime.agent, runtime.config
 
 
 def _get_runtime() -> tuple[OpenAILLMClient, DBAgent, DBAgentConfig]:
@@ -247,6 +248,7 @@ def _run_question(question: str, *, force_query: bool = False) -> None:
                     "allowed_rows": config.max_rows,
                     "statement_timeout_ms": config.statement_timeout_ms,
                     "error": None,
+                    "coverage": result.coverage or [],
                 }
             )
         except Exception as exc:  # noqa: BLE001 - UI boundary maps failures for users.
@@ -267,6 +269,7 @@ def _run_question(question: str, *, force_query: bool = False) -> None:
                     "statement_timeout_ms": None,
                     "error": str(exc),
                     "error_id": error_id,
+                    "coverage": [],
                 }
             )
 
@@ -284,7 +287,10 @@ def _recovered(traces: list[QueryTrace], trace_index: int) -> bool:
 
 
 def _render_metrics(traces: list[QueryTrace]) -> None:
-    metrics = metrics_for_traces(traces, ACTIVE_PROFILE.presentation)
+    metrics = metrics_for_traces(
+        [trace for trace in traces if trace.stage == "result"],
+        ACTIVE_PROFILE.presentation,
+    )
     if not metrics:
         return
     for start in range(0, len(metrics), 3):
@@ -296,7 +302,7 @@ def _render_metrics(traces: list[QueryTrace]) -> None:
 
 
 def _render_data_trace(trace: QueryTrace, turn_index: int, trace_index: int) -> None:
-    if trace.error or not trace.columns:
+    if trace.stage != "result" or trace.error or not trace.columns:
         return
     st.markdown(f"**Supporting data {trace_index + 1}**")
     if trace.truncated:
@@ -335,8 +341,10 @@ def _render_methodology(msg: dict[str, Any], traces: list[QueryTrace]) -> None:
                 if trace.error
                 else ""
             )
+            source = f" · {trace.database}" if trace.database else ""
             st.markdown(
-                f"**Step {trace_index + 1}{status}** · {trace.row_count} {row_label}"
+                f"**Step {trace_index + 1}{status}**{source} · "
+                f"{trace.row_count} {row_label}"
             )
             if trace.purpose:
                 st.caption(trace.purpose)
@@ -346,6 +354,12 @@ def _render_methodology(msg: dict[str, Any], traces: list[QueryTrace]) -> None:
                 st.code(trace.sql, language="sql")
             if trace.truncated:
                 st.caption("Result was limited to the configured row cap.")
+        coverage: list[DatabaseCoverage] = msg.get("coverage") or []
+        if coverage:
+            st.markdown("**Data coverage**")
+            for item in coverage:
+                detail = f" — {item.detail}" if item.detail else ""
+                st.caption(f"{item.database}: {item.status}{detail}")
         if msg.get("model"):
             st.caption(f"Model: {msg['model']}")
             st.caption(f"Endpoint: {msg['endpoint']}")
@@ -373,6 +387,15 @@ def _render_conversation() -> None:
                 st.markdown(msg["content"])
 
             traces = msg.get("traces") or []
+            coverage: list[DatabaseCoverage] = msg.get("coverage") or []
+            unavailable = [
+                item.database for item in coverage if item.status == "unavailable"
+            ]
+            if unavailable:
+                st.warning(
+                    "This answer is incomplete because these data sources were "
+                    f"unavailable: {', '.join(unavailable)}."
+                )
             if traces:
                 incomplete = any(
                     trace.error and not _recovered(traces, index)
@@ -384,9 +407,14 @@ def _render_conversation() -> None:
                         "See how this was calculated for details."
                     )
                 _render_metrics(traces)
-                if any(not trace.error and trace.columns for trace in traces):
+                result_traces = [
+                    trace
+                    for trace in traces
+                    if trace.stage == "result" and not trace.error and trace.columns
+                ]
+                if result_traces:
                     st.markdown("##### Data behind this answer")
-                    for trace_index, trace in enumerate(traces):
+                    for trace_index, trace in enumerate(result_traces):
                         _render_data_trace(trace, turn_index, trace_index)
                 _render_methodology(msg, traces)
             elif msg.get("model"):
