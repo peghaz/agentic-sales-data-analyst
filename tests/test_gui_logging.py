@@ -20,7 +20,7 @@ class GUILoggingTests(SimpleTestCase):
         self.assertIs(configure_gui_logger(), logger)
         self.assertEqual(
             sum(
-                getattr(handler, "_sales_data_analyst_handler", False)
+                getattr(handler, "_data_analyst_handler", False)
                 for handler in logger.handlers
             ),
             1,
@@ -33,7 +33,7 @@ class GUILoggingTests(SimpleTestCase):
         console = Console(
             file=output, force_terminal=False, color_system=None, width=120
         )
-        logger = logging.getLogger("sales_data_analyst.test_rich_output")
+        logger = logging.getLogger("data_analyst.test_rich_output")
         handler = make_rich_handler(console)
         logger.addHandler(handler)
         logger.setLevel(logging.ERROR)

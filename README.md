@@ -5,7 +5,9 @@ sales data in plain language. It uses an OpenAI-compatible model to plan
 read-only SQL queries, validates every query, and presents business findings
 with KPI cards, charts, and downloadable tables.
 
-> 💡 **Extensibility:** Replacing the database with a different one will easily turn this repo into an analyst of a different purpose.
+> 💡 **Extensibility:** Select a Markdown domain profile and point the agent at a
+> different database to create an analyst for another purpose without editing
+> Python prompt strings.
 
 The setup instructions below are for the developer or operator running the
 application. Business users only need the Streamlit URL produced at startup.
@@ -47,6 +49,7 @@ DB_AGENT_DATABASE_PORT=5656
 DB_AGENT_DATABASE_NAME=dbagent
 DB_AGENT_DATABASE_USER=postgres
 DB_AGENT_DATABASE_PASSWORD=choose-a-password
+DB_AGENT_PROFILE=sales
 
 LLM_MODEL_NAME=your-served-model-name
 LLM_API_MODE=chat
@@ -198,18 +201,9 @@ monthly comparison, ask “Which shop drove the change?” or “Now show only G
 Conversation context is held in memory for the current Streamlit session only;
 old conversations are not saved.
 
-Try these showcase questions:
-
-- Give me an executive sales summary for the latest 12 months in the data: revenue by currency, orders, active customers, average order value, top shop, and top product.
-- Compare monthly revenue and order volume by shop for the latest 12 months, including month-over-month change and keeping currencies separate.
-- Rank the top 10 customers by lifetime spend, showing order count, average order value, last purchase date, and keeping currencies separate.
-- Build a customer retention view by signup month: customers acquired and how many purchased again within 30, 60, and 90 days.
-- Find high-value customers at risk: at least 5 paid or shipped orders, but no purchase in the 90 days before the latest order in the dataset.
-- Which product categories deliver the highest estimated gross profit and margin percentage, using product cost and line-item sales and keeping currencies separate?
-- Find the product pairs most frequently bought together, with pair count and combined sales by currency.
-- Compare payment failure rates by payment method and shop, including attempts, failed payments, and failed amount by currency.
-- Compare carrier performance by destination country: shipment count, average and 90th-percentile delivery time, return rate, and shipping cost by currency.
-- Show cancellation and refund rates by shop and month, with affected order value by currency.
+The default showcase questions are maintained in
+[`customer_service/llm/config/sales/examples.md`](customer_service/llm/config/sales/examples.md)
+and appear automatically in the sidebar.
 
 Monetary analyses keep currencies separate unless conversion data is available.
 
@@ -253,6 +247,7 @@ Important database-agent settings include:
 - `DB_AGENT_QUERY_RETRIES`
 - `DB_AGENT_MODEL_MAX_TOKENS` — output budget per model turn; default `4096`
 - `DB_AGENT_ENABLE_THINKING` — Qwen/vLLM thinking mode; default `true`
+- `DB_AGENT_PROFILE` — Markdown domain profile; default `sales`
 
 Important model-client settings include:
 
@@ -266,6 +261,41 @@ If a response reaches its output limit before returning a tool call, raise
 `DB_AGENT_MODEL_MAX_TOKENS` to `8192`. For lower latency and more direct tool
 calls, set `DB_AGENT_ENABLE_THINKING=false`. Restart Streamlit after changing
 either value.
+
+## Domain profiles
+
+Each named profile lives under `customer_service/llm/config/<profile>/` and
+contains four Markdown files:
+
+- `profile.md` — application name, icon, caption, welcome message, chat copy,
+  analysis status, and data-source label
+- `agent.md` — domain persona, terminology, analytical priorities, and answer style
+- `examples.md` — sidebar categories and example questions
+- `presentation.md` — column-name hints used to select KPI cards and charts
+
+Create a profile by copying the default and editing the Markdown:
+
+```bash
+cp -R customer_service/llm/config/sales customer_service/llm/config/animals
+```
+
+Then select it in `.env` and configure the corresponding database connection,
+allowed schemas, and allowed tables:
+
+```env
+DB_AGENT_PROFILE=animals
+```
+
+Profile names may contain lowercase letters, numbers, hyphens, and underscores.
+All required headings and bullet lists are validated at startup. A malformed or
+missing profile produces an actionable configuration error instead of silently
+falling back to sales content.
+
+The Markdown profile controls domain language and presentation hints, but it
+cannot replace code-owned read-only validation, evidence-grounding rules, SQL
+limits, or tool contracts. Changing databases may also require separate models,
+migrations, or data-loading code; the bundled Django models and CSV loader remain
+sales-specific. Restart Streamlit after editing or changing a profile.
 
 ## Architecture and conversation behavior
 

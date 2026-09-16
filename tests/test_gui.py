@@ -1,5 +1,7 @@
 """Streamlit rendering and chat interaction tests."""
 
+import os
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -12,6 +14,11 @@ from customer_service.db_agent.agent import DBAgentResult, QueryTrace
 from customer_service.db_agent.config import DBAgentConfig
 from customer_service.db_agent.database import DatabaseSchema
 from customer_service.llm.client import LLMConfig, LLMResponseError
+from customer_service.llm.profile import (
+    DomainProfileError,
+    PromptCategory,
+    load_domain_profile,
+)
 
 GUI_PATH = Path(__file__).resolve().parents[1] / "gui.py"
 
@@ -35,6 +42,94 @@ def _render(traces: list[QueryTrace]) -> AppTest:
     app = AppTest.from_file(str(GUI_PATH)).run(timeout=10)
     app.session_state["conversation"] = [_assistant_turn(traces)]
     return app.run(timeout=10)
+
+
+class GUIDomainProfileTests(SimpleTestCase):
+    def test_alternate_profile_drives_branding_examples_and_input_copy(self):
+        animal_profile = replace(
+            load_domain_profile("sales"),
+            name="animals",
+            app_name="Animal Population Analyst",
+            page_icon="🐾",
+            page_caption="Population findings across species and habitats.",
+            welcome_message="Ask about animal populations and habitats.",
+            chat_placeholder="Ask a question about wildlife data",
+            analysis_status="Analyzing wildlife data...",
+            data_source_label="wildlife data",
+            agent_instructions="You are an animal population analyst.",
+            example_categories=(
+                PromptCategory(
+                    label="Population",
+                    prompts=("Compare annual population by species.",),
+                ),
+            ),
+        )
+        fake_result = DBAgentResult(
+            answer="Wolf populations increased.",
+            model="test-model",
+            latency_ms=1.0,
+            traces=[],
+        )
+        with (
+            patch.dict(os.environ, {"DB_AGENT_PROFILE": "animals"}),
+            patch(
+                "customer_service.llm.profile.load_domain_profile",
+                return_value=animal_profile,
+            ) as load_profile,
+            patch(
+                "customer_service.db_agent.agent.DBAgent.ask",
+                return_value=fake_result,
+            ),
+        ):
+            app = AppTest.from_file(str(GUI_PATH)).run(timeout=10)
+            app.chat_input[0].set_value("Count wolves").run(timeout=10)
+
+        self.assertEqual(list(app.exception), [])
+        self.assertEqual(app.title[0].value, "Animal Population Analyst")
+        self.assertIn(
+            "Population findings across species and habitats.",
+            [item.value for item in app.caption],
+        )
+        self.assertIn(
+            "Ask about animal populations and habitats.",
+            [item.value for item in app.markdown],
+        )
+        self.assertIn(
+            "Compare annual population by species.",
+            [button.label for button in app.button],
+        )
+        self.assertEqual(
+            app.chat_input[0].placeholder, "Ask a question about wildlife data"
+        )
+        self.assertEqual(app.status[0].label, "Analyzing wildlife data...")
+        load_profile.assert_any_call("animals")
+        self.assertTrue(
+            all(call.args == ("animals",) for call in load_profile.call_args_list)
+        )
+
+    def test_invalid_profile_shows_actionable_configuration_state(self):
+        with (
+            patch(
+                "customer_service.llm.profile.load_domain_profile",
+                side_effect=DomainProfileError(
+                    "Missing required section: Page caption"
+                ),
+            ),
+            patch("customer_service.gui_logging.log_analysis_failure") as log_failure,
+        ):
+            app = AppTest.from_file(str(GUI_PATH)).run(timeout=10)
+
+        self.assertEqual(list(app.exception), [])
+        self.assertEqual(
+            [item.value for item in app.error],
+            ["The selected domain profile could not be loaded."],
+        )
+        self.assertIn(
+            "Check DB_AGENT_PROFILE",
+            " ".join(item.value for item in app.caption),
+        )
+        self.assertIn("Missing required section", app.code[0].value)
+        log_failure.assert_called_once()
 
 
 class GUITraceRenderingTests(SimpleTestCase):

@@ -8,6 +8,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from customer_service.llm.client import LLMResponse, LLMResponseError, OpenAILLMClient
+from customer_service.llm.profile import DomainProfile
 
 from .config import DBAgentConfig
 from .database import DatabaseAdapter, DatabaseSchema
@@ -67,6 +68,7 @@ def build_workflow(
     client: OpenAILLMClient,
     adapter: DatabaseAdapter,
     config: DBAgentConfig,
+    profile: DomainProfile,
     checkpointer: InMemorySaver,
 ) -> Any:
     """Compile an explicit model → validated query → answer workflow."""
@@ -88,7 +90,10 @@ def build_workflow(
         )
         history = state.get("history", [])
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": build_system_prompt(schema, config)}
+            {
+                "role": "system",
+                "content": build_system_prompt(schema, config, profile),
+            }
         ]
         messages.extend(history_messages(history))
         evidence = evidence_message(history)

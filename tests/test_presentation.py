@@ -4,6 +4,9 @@ from django.test import SimpleTestCase
 
 from customer_service.db_agent.presentation import charts_for_trace, metrics_for_traces
 from customer_service.db_agent.types import QueryTrace
+from customer_service.llm.profile import PresentationHints, load_domain_profile
+
+SALES_HINTS = load_domain_profile("sales").presentation
 
 
 def _trace(rows, columns, *, truncated=False):
@@ -24,7 +27,7 @@ class PresentationTests(SimpleTestCase):
             ("currency", "revenue", "orders", "shop_id"),
         )
 
-        metrics = metrics_for_traces([trace])
+        metrics = metrics_for_traces([trace], SALES_HINTS)
 
         self.assertEqual(
             [(metric.label, metric.value) for metric in metrics],
@@ -38,7 +41,10 @@ class PresentationTests(SimpleTestCase):
         )
 
         self.assertEqual(
-            [(metric.label, metric.value) for metric in metrics_for_traces([trace])],
+            [
+                (metric.label, metric.value)
+                for metric in metrics_for_traces([trace], SALES_HINTS)
+            ],
             [("Failure rate", "0.0043")],
         )
 
@@ -53,7 +59,7 @@ class PresentationTests(SimpleTestCase):
             ("month", "currency", "revenue"),
         )
 
-        charts = charts_for_trace(trace)
+        charts = charts_for_trace(trace, SALES_HINTS)
 
         self.assertEqual([chart.kind for chart in charts], ["line", "line"])
         self.assertEqual(
@@ -78,8 +84,32 @@ class PresentationTests(SimpleTestCase):
             ("month", "shop_name", "revenue"),
         )
 
-        self.assertEqual(charts_for_trace(ranked)[0].kind, "bar")
-        self.assertEqual(charts_for_trace(ambiguous), [])
+        self.assertEqual(charts_for_trace(ranked, SALES_HINTS)[0].kind, "bar")
+        self.assertEqual(charts_for_trace(ambiguous, SALES_HINTS), [])
         self.assertEqual(
-            charts_for_trace(_trace(ranked.rows, ranked.columns, truncated=True)), []
+            charts_for_trace(
+                _trace(ranked.rows, ranked.columns, truncated=True), SALES_HINTS
+            ),
+            [],
         )
+
+    def test_alternate_profile_controls_metric_and_category_detection(self):
+        hints = PresentationHints(
+            metric_words=("population",),
+            time_words=("year",),
+            category_words=("species",),
+        )
+        scalar = _trace([{"population": 1250}], ("population",))
+        ranked = _trace(
+            [
+                {"species": "Wolf", "population": 45},
+                {"species": "Lynx", "population": 31},
+            ],
+            ("species", "population"),
+        )
+
+        self.assertEqual(metrics_for_traces([scalar], hints)[0].value, "1,250")
+        chart = charts_for_trace(ranked, hints)[0]
+        self.assertEqual(chart.kind, "bar")
+        self.assertEqual(chart.x, "species")
+        self.assertEqual(chart.y, "population")

@@ -7,8 +7,8 @@ import logging
 from rich.console import Console
 from rich.logging import RichHandler
 
-LOGGER_NAME = "sales_data_analyst.gui"
-_HANDLER_MARKER = "_sales_data_analyst_handler"
+LOGGER_NAME = "data_analyst.gui"
+_HANDLER_MARKER = "_data_analyst_handler"
 
 
 def make_rich_handler(console: Console | None = None) -> RichHandler:

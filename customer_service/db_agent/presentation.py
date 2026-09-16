@@ -6,35 +6,9 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
-from .types import QueryTrace
+from customer_service.llm.profile import PresentationHints
 
-_METRIC_WORDS = (
-    "count",
-    "orders",
-    "customers",
-    "revenue",
-    "sales",
-    "amount",
-    "total",
-    "average",
-    "avg",
-    "aov",
-    "profit",
-    "margin",
-    "rate",
-    "cost",
-)
-_TIME_NAMES = ("month", "date", "day", "week", "year")
-_CATEGORY_NAMES = (
-    "shop",
-    "product",
-    "category",
-    "customer",
-    "method",
-    "carrier",
-    "country",
-    "name",
-)
+from .types import QueryTrace
 
 
 @dataclass(frozen=True)
@@ -66,12 +40,12 @@ def _number(value: Any) -> Decimal | None:
     return number if number.is_finite() else None
 
 
-def _is_metric_name(name: str) -> bool:
+def _is_metric_name(name: str, hints: PresentationHints) -> bool:
     lower = name.lower()
     return (
         lower != "id"
         and not lower.endswith("_id")
-        and any(word in lower for word in _METRIC_WORDS)
+        and any(word in lower for word in hints.metric_words)
     )
 
 
@@ -83,7 +57,9 @@ def _format_number(value: Decimal) -> str:
     return f"{value:,.2f}"
 
 
-def metrics_for_traces(traces: list[QueryTrace], limit: int = 6) -> list[Metric]:
+def metrics_for_traces(
+    traces: list[QueryTrace], hints: PresentationHints, limit: int = 6
+) -> list[Metric]:
     """Highlight unambiguous scalar metrics, never totals across currencies."""
 
     metrics: list[Metric] = []
@@ -94,7 +70,7 @@ def metrics_for_traces(traces: list[QueryTrace], limit: int = 6) -> list[Metric]
         row = trace.rows[0]
         currency = row.get("currency")
         for name, value in row.items():
-            if not _is_metric_name(name):
+            if not _is_metric_name(name, hints):
                 continue
             number = _number(value)
             if number is None:
@@ -119,12 +95,15 @@ def _axis(columns: tuple[str, ...], words: tuple[str, ...]) -> str | None:
 
 
 def _chart_for_rows(
-    rows: list[dict[str, Any]], columns: tuple[str, ...], currency: str | None
+    rows: list[dict[str, Any]],
+    columns: tuple[str, ...],
+    currency: str | None,
+    hints: PresentationHints,
 ) -> ChartSpec | None:
     if not 2 <= len(rows) <= 100:
         return None
-    time_axis = _axis(columns, _TIME_NAMES)
-    category_axis = _axis(columns, _CATEGORY_NAMES)
+    time_axis = _axis(columns, hints.time_words)
+    category_axis = _axis(columns, hints.category_words)
     x = time_axis or category_axis
     if not x:
         return None
@@ -137,7 +116,7 @@ def _chart_for_rows(
         name
         for name in columns
         if name not in {x, "currency"}
-        and not _is_metric_name(name)
+        and not _is_metric_name(name, hints)
         and any(row.get(name) is not None for row in rows)
     ]
     if other_dimensions:
@@ -147,7 +126,7 @@ def _chart_for_rows(
             name
             for name in columns
             if name != x
-            and _is_metric_name(name)
+            and _is_metric_name(name, hints)
             and all(_number(row.get(name)) is not None for row in rows)
         ),
         None,
@@ -165,7 +144,7 @@ def _chart_for_rows(
     return ChartSpec(title, "line" if time_axis else "bar", x, y, chart_rows)
 
 
-def charts_for_trace(trace: QueryTrace) -> list[ChartSpec]:
+def charts_for_trace(trace: QueryTrace, hints: PresentationHints) -> list[ChartSpec]:
     """Only chart flat, complete data with a clear axis and monetary partition."""
 
     if trace.error or trace.truncated or not trace.rows:
@@ -177,14 +156,14 @@ def charts_for_trace(trace: QueryTrace) -> list[ChartSpec]:
     ):
         return []
     if "currency" not in trace.columns:
-        chart = _chart_for_rows(trace.rows, trace.columns, None)
+        chart = _chart_for_rows(trace.rows, trace.columns, None, hints)
         return [chart] if chart else []
 
     currencies = sorted({str(row.get("currency")) for row in trace.rows})
     charts: list[ChartSpec] = []
     for currency in currencies:
         rows = [row for row in trace.rows if str(row.get("currency")) == currency]
-        chart = _chart_for_rows(rows, trace.columns, currency)
+        chart = _chart_for_rows(rows, trace.columns, currency, hints)
         if chart:
             charts.append(chart)
     return charts

@@ -9,6 +9,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from customer_service.llm.client import OpenAILLMClient
+from customer_service.llm.profile import DomainProfile, load_domain_profile
 
 from .config import DBAgentConfig
 from .database import DatabaseAdapter, DatabaseSchema
@@ -27,8 +28,10 @@ class DBAgent:
         client: OpenAILLMClient,
         adapter: DatabaseAdapter,
         config: DBAgentConfig,
+        profile: DomainProfile | None = None,
     ) -> None:
         self._config = config
+        self._profile = profile or load_domain_profile(config.profile_name)
         self._checkpointer = InMemorySaver(
             serde=JsonPlusSerializer(
                 allowed_msgpack_modules=[
@@ -40,7 +43,9 @@ class DBAgent:
                 ]
             )
         )
-        self._graph = build_workflow(client, adapter, config, self._checkpointer)
+        self._graph = build_workflow(
+            client, adapter, config, self._profile, self._checkpointer
+        )
 
     def ask(
         self,
@@ -76,7 +81,7 @@ class DBAgent:
     def _build_system_prompt(self, schema: DatabaseSchema) -> str:
         """Compatibility helper for existing prompt tests and integrations."""
 
-        return build_system_prompt(schema, self._config)
+        return build_system_prompt(schema, self._config, self._profile)
 
     @staticmethod
     def _tool_schema() -> dict[str, Any]:

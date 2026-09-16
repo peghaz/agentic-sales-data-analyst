@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import os
 from typing import Any
 from uuid import uuid4
 
@@ -19,86 +20,43 @@ from customer_service.db_agent.presentation import (
 )
 from customer_service.gui_logging import log_analysis_failure
 from customer_service.llm.client import LLMError, OpenAILLMClient
+from customer_service.llm.profile import (
+    DomainProfile,
+    DomainProfileError,
+    load_domain_profile,
+)
 
 load_dotenv()
 
-WELCOME_MESSAGE = (
-    "Ask about sales, customers, products, or operations. I’ll summarize the "
-    "finding and show the data behind it."
-)
 
-EXAMPLE_PROMPTS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        "Executive",
-        (
-            (
-                "Give me an executive sales summary for the latest 12 months in the data: "
-                "revenue by currency, orders, active customers, average order value, top "
-                "shop, and top product."
-            ),
-            (
-                "Compare monthly revenue and order volume by shop for the latest 12 months, "
-                "including month-over-month change and keeping currencies separate."
-            ),
-        ),
-    ),
-    (
-        "Customers",
-        (
-            (
-                "Rank the top 10 customers by lifetime spend, showing order count, average "
-                "order value, last purchase date, and keeping currencies separate."
-            ),
-            (
-                "Build a customer retention view by signup month: customers acquired and "
-                "how many purchased again within 30, 60, and 90 days."
-            ),
-            (
-                "Find high-value customers at risk: at least 5 paid or shipped orders, but "
-                "no purchase in the 90 days before the latest order in the dataset."
-            ),
-        ),
-    ),
-    (
-        "Products",
-        (
-            (
-                "Which product categories deliver the highest estimated gross profit and "
-                "margin percentage, using product cost and line-item sales and keeping "
-                "currencies separate?"
-            ),
-            (
-                "Find the product pairs most frequently bought together, with pair count "
-                "and combined sales by currency."
-            ),
-        ),
-    ),
-    (
-        "Operations",
-        (
-            (
-                "Compare payment failure rates by payment method and shop, including "
-                "attempts, failed payments, and failed amount by currency."
-            ),
-            (
-                "Compare carrier performance by destination country: shipment count, "
-                "average and 90th-percentile delivery time, return rate, and shipping cost "
-                "by currency."
-            ),
-            (
-                "Show cancellation and refund rates by shop and month, with affected order "
-                "value by currency."
-            ),
-        ),
-    ),
-)
+def _load_active_profile() -> DomainProfile:
+    profile_name = os.getenv("DB_AGENT_PROFILE", "sales").strip() or "sales"
+    try:
+        return load_domain_profile(profile_name)
+    except DomainProfileError as exc:
+        error_id = uuid4().hex[:8]
+        log_analysis_failure(exc, error_id=error_id)
+        st.set_page_config(page_title="Data Analyst", page_icon="📊", layout="wide")
+        st.title("Data Analyst")
+        st.error("The selected domain profile could not be loaded.")
+        st.caption(
+            "Check DB_AGENT_PROFILE and the Markdown files under "
+            "customer_service/llm/config, then restart Streamlit."
+        )
+        st.caption(f"Error ID: {error_id}")
+        with st.expander("Configuration detail", expanded=False):
+            st.code(str(exc), language="text")
+        st.stop()
+
+
+ACTIVE_PROFILE = _load_active_profile()
 
 
 def _initial_conversation() -> list[dict[str, Any]]:
     return [
         {
             "role": "assistant",
-            "content": WELCOME_MESSAGE,
+            "content": ACTIVE_PROFILE.welcome_message,
             "traces": [],
             "model": None,
             "endpoint": None,
@@ -119,7 +77,7 @@ def _format_error_for_user(exc: Exception) -> str:
         )
     if isinstance(exc, DatabaseError):
         return (
-            "I couldn't reach the sales data right now. "
+            f"I couldn't reach the {ACTIVE_PROFILE.data_source_label} right now. "
             "Please retry, or contact an administrator if it continues."
         )
     if isinstance(exc, DBAgentError):
@@ -136,7 +94,12 @@ def _build_runtime() -> tuple[OpenAILLMClient, DBAgent, DBAgentConfig]:
         dsn=config.database_url,
         statement_timeout_ms=config.statement_timeout_ms,
     )
-    agent = DBAgent(client=client, adapter=adapter, config=config)
+    agent = DBAgent(
+        client=client,
+        adapter=adapter,
+        config=config,
+        profile=ACTIVE_PROFILE,
+    )
     return client, agent, config
 
 
@@ -262,7 +225,7 @@ def _run_question(question: str, *, force_query: bool = False) -> None:
 
     st.session_state.conversation.append({"role": "user", "content": question})
 
-    with st.status("Analyzing sales data...", expanded=False):
+    with st.status(ACTIVE_PROFILE.analysis_status, expanded=False):
         try:
             client, agent, config = _get_runtime()
             result = agent.ask(
@@ -321,7 +284,7 @@ def _recovered(traces: list[QueryTrace], trace_index: int) -> bool:
 
 
 def _render_metrics(traces: list[QueryTrace]) -> None:
-    metrics = metrics_for_traces(traces)
+    metrics = metrics_for_traces(traces, ACTIVE_PROFILE.presentation)
     if not metrics:
         return
     for start in range(0, len(metrics), 3):
@@ -344,7 +307,7 @@ def _render_data_trace(trace: QueryTrace, turn_index: int, trace_index: int) -> 
         st.caption("No matching data was found.")
         return
 
-    for chart in charts_for_trace(trace):
+    for chart in charts_for_trace(trace, ACTIVE_PROFILE.presentation):
         st.caption(chart.title)
         if chart.kind == "line":
             st.line_chart(chart.rows, x=chart.x, y=chart.y, width="stretch")
@@ -449,7 +412,7 @@ def _render_conversation() -> None:
 
 def _sidebar() -> None:
     with st.sidebar:
-        st.header("Sales Data Analyst")
+        st.header(ACTIVE_PROFILE.app_name)
         if st.button("Clear chat", width="stretch"):
             st.session_state.conversation = _initial_conversation()
             st.session_state.pop("runtime", None)
@@ -464,9 +427,11 @@ def _sidebar() -> None:
         )
 
         with st.expander("Try a showcase question", expanded=True):
-            for category_index, (category, prompts) in enumerate(EXAMPLE_PROMPTS):
-                st.markdown(f"**{category}**")
-                for prompt_index, prompt in enumerate(prompts):
+            for category_index, category in enumerate(
+                ACTIVE_PROFILE.example_categories
+            ):
+                st.markdown(f"**{category.label}**")
+                for prompt_index, prompt in enumerate(category.prompts):
                     if st.button(
                         prompt,
                         key=f"example-{category_index}-{prompt_index}",
@@ -478,8 +443,8 @@ def _sidebar() -> None:
 
 
 st.set_page_config(
-    page_title="Sales Data Analyst",
-    page_icon="📊",
+    page_title=ACTIVE_PROFILE.app_name,
+    page_icon=ACTIVE_PROFILE.page_icon,
     layout="wide",
 )
 
@@ -495,8 +460,8 @@ if "queued_force_query" not in st.session_state:
 if "thread_id" not in st.session_state:
     st.session_state.thread_id = uuid4().hex
 
-st.title("Sales Data Analyst")
-st.caption("Clear findings, useful comparisons, and the numbers behind each answer.")
+st.title(ACTIVE_PROFILE.app_name)
+st.caption(ACTIVE_PROFILE.page_caption)
 _sidebar()
 
 queued_prompt = st.session_state.get("queued_prompt")
@@ -506,7 +471,7 @@ if queued_prompt:
     st.session_state.queued_force_query = False
     _run_question(queued_prompt, force_query=force_query)
 
-rendered_trigger = st.chat_input("Ask a question about your sales data")
+rendered_trigger = st.chat_input(ACTIVE_PROFILE.chat_placeholder)
 if rendered_trigger:
     _run_question(rendered_trigger)
 

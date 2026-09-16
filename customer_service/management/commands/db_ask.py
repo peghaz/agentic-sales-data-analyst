@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 from django.core.management.base import BaseCommand, CommandError
 
@@ -46,26 +47,16 @@ class Command(BaseCommand):
         try:
             config = DBAgentConfig.from_env()
             if options.get("sql_limit"):
-                config = config.__class__(
-                    database_url=config.database_url,
-                    allowed_schemas=config.allowed_schemas,
-                    allowed_tables=config.allowed_tables,
+                config = replace(
+                    config,
                     max_rows=options["sql_limit"],
-                    max_result_chars=config.max_result_chars,
-                    statement_timeout_ms=config.statement_timeout_ms,
-                    max_tool_calls=options.get("max_tool_calls") or config.max_tool_calls,
-                    query_retries=config.query_retries,
+                    max_tool_calls=options.get("max_tool_calls")
+                    or config.max_tool_calls,
                 )
             elif options.get("max_tool_calls"):
-                config = config.__class__(
-                    database_url=config.database_url,
-                    allowed_schemas=config.allowed_schemas,
-                    allowed_tables=config.allowed_tables,
-                    max_rows=config.max_rows,
-                    max_result_chars=config.max_result_chars,
-                    statement_timeout_ms=config.statement_timeout_ms,
+                config = replace(
+                    config,
                     max_tool_calls=options["max_tool_calls"],
-                    query_retries=config.query_retries,
                 )
             client = OpenAILLMClient()
             adapter = PostgresDatabaseAdapter(
@@ -92,7 +83,9 @@ class Command(BaseCommand):
             for index, trace in enumerate(result.traces, start=1):
                 self.stdout.write("")
                 self.stdout.write(f"{index}. purpose: {trace.purpose or 'n/a'}")
-                self.stdout.write(f"   rows: {trace.row_count} {'(truncated)' if trace.truncated else ''}")
+                self.stdout.write(
+                    f"   rows: {trace.row_count} {'(truncated)' if trace.truncated else ''}"
+                )
                 if trace.sql:
                     self.stdout.write(f"   sql: {trace.sql}")
                 if trace.error:
@@ -100,7 +93,9 @@ class Command(BaseCommand):
                 if trace.columns:
                     preview = trace.rows[:3]
                     if preview:
-                        self.stdout.write(f"   sample: {json.dumps(preview, ensure_ascii=False)}")
+                        self.stdout.write(
+                            f"   sample: {json.dumps(preview, ensure_ascii=False)}"
+                        )
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Answer:"))

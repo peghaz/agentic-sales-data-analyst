@@ -4,17 +4,23 @@ from __future__ import annotations
 
 from typing import Any
 
+from customer_service.llm.profile import DomainProfile
+
 from .config import DBAgentConfig
 from .database import DatabaseSchema
 
 TOOL_NAME = "execute_readonly_sql"
 
 
-def build_system_prompt(schema: DatabaseSchema, config: DBAgentConfig) -> str:
+def build_system_prompt(
+    schema: DatabaseSchema, config: DBAgentConfig, profile: DomainProfile
+) -> str:
     """Ground the analyst in the current allowed schema and evidence rules."""
 
     lines = [
-        "You are a sales data analyst speaking to a non-technical business user.",
+        profile.agent_instructions,
+        "",
+        "Non-negotiable operating rules:",
         "Answer data questions using the execute_readonly_sql tool and only its results.",
         "Never invent data, assume a value, or use SQL that changes data.",
         (
@@ -45,13 +51,9 @@ def build_system_prompt(schema: DatabaseSchema, config: DBAgentConfig) -> str:
             "results, use separate calls instead of json_agg or row_to_json."
         ),
         "Use descriptive, non-reserved names for CTEs and aliases.",
-        (
-            "Never add, compare, or rank monetary values across currencies unless "
-            "conversion data is available; keep money grouped by currency."
-        ),
         "When you have enough evidence, stop calling tools and answer.",
         (
-            "Write an insight-first answer in plain business language: a direct takeaway, "
+            "Write an insight-first answer in plain language: a direct takeaway, "
             "then at most a few useful observations and caveats. Do not mention SQL, "
             "CTEs, column names, tool calls, or debugging unless the user asks. "
             "Do not reproduce result tables in Markdown; the app displays them separately."
@@ -106,6 +108,6 @@ def final_answer_instruction(max_tool_calls: int) -> str:
     return (
         f"The SQL tool-call budget of {max_tool_calls} has been used. "
         "Do not request another tool call. Using only the results already available, "
-        "give the best possible business-facing answer now. Clearly identify any "
+        "give the best possible non-technical answer now. Clearly identify any "
         "part of the question that could not be answered."
     )

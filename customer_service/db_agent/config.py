@@ -85,6 +85,7 @@ class DBAgentConfig:
     query_retries: int = 2
     model_max_tokens: int = 4096
     enable_thinking: bool = True
+    profile_name: str = "sales"
 
     @classmethod
     def from_env(cls) -> DBAgentConfig:
@@ -113,4 +114,5 @@ class DBAgentConfig:
             query_retries=_parse_int("DB_AGENT_QUERY_RETRIES", 2),
             model_max_tokens=_parse_positive_int("DB_AGENT_MODEL_MAX_TOKENS", 4096),
             enable_thinking=_parse_bool("DB_AGENT_ENABLE_THINKING", True),
+            profile_name=os.getenv("DB_AGENT_PROFILE", "sales").strip() or "sales",
         )

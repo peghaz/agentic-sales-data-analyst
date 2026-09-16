@@ -1,1 +1,1 @@
-"""Offline regression tests for the Sales Data Analyst application."""
+"""Offline regression tests for the configurable data analyst application."""

@@ -2,14 +2,17 @@
 
 import json
 import os
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
+from io import StringIO
 from typing import Any
 from unittest.mock import patch
 
+from django.core.management import call_command
 from django.test import SimpleTestCase
 
-from customer_service.db_agent.agent import DBAgent, QueryTrace
+from customer_service.db_agent.agent import DBAgent, DBAgentResult, QueryTrace
 from customer_service.db_agent.config import DBAgentConfig
 from customer_service.db_agent.database import (
     ColumnMeta,
@@ -24,6 +27,7 @@ from customer_service.db_agent.validator import (
     validate_readonly_sql,
 )
 from customer_service.llm.client import LLMResponse
+from customer_service.llm.profile import load_domain_profile
 
 
 def _catalog() -> DatabaseSchema:
@@ -131,6 +135,7 @@ class DBAgentConfigTests(SimpleTestCase):
 
         self.assertEqual(config.model_max_tokens, 4096)
         self.assertTrue(config.enable_thinking)
+        self.assertEqual(config.profile_name, "sales")
 
     @patch.dict(
         os.environ,
@@ -138,6 +143,7 @@ class DBAgentConfigTests(SimpleTestCase):
             "DB_AGENT_DATABASE_URL": "postgresql://unused",
             "DB_AGENT_MODEL_MAX_TOKENS": "8192",
             "DB_AGENT_ENABLE_THINKING": "off",
+            "DB_AGENT_PROFILE": "animals",
         },
         clear=True,
     )
@@ -146,6 +152,7 @@ class DBAgentConfigTests(SimpleTestCase):
 
         self.assertEqual(config.model_max_tokens, 8192)
         self.assertFalse(config.enable_thinking)
+        self.assertEqual(config.profile_name, "animals")
 
     def test_invalid_model_token_budget_is_rejected(self):
         for value in ("0", "-1", "many"):
@@ -272,6 +279,30 @@ class DBAgentLoopTests(SimpleTestCase):
         self.assertIn("Do not spend a separate exploratory call", prompt)
         self.assertIn("non-technical business user", prompt)
         self.assertIn("If a follow-up reference is unclear", prompt)
+
+    def test_domain_profile_changes_persona_without_changing_safety_rules(self):
+        animal_profile = replace(
+            load_domain_profile("sales"),
+            name="animals",
+            agent_instructions=(
+                "You are an animal population analyst advising conservation teams."
+            ),
+        )
+        agent = DBAgent(
+            client=_FakeClient([]),
+            adapter=_FakeAdapter(),
+            config=_config(3),
+            profile=animal_profile,
+        )
+
+        prompt = agent._build_system_prompt(_catalog())
+
+        self.assertIn("animal population analyst", prompt)
+        self.assertNotIn("sales data analyst", prompt)
+        self.assertIn("Never invent data", prompt)
+        self.assertIn("Only read from the tables listed below", prompt)
+        self.assertIn("at most 3 SQL tool calls", prompt)
+        self.assertIn("public.orders", prompt)
 
     def test_follow_up_receives_prior_answer_and_query_evidence(self):
         client = _FakeClient(
@@ -424,6 +455,52 @@ class DBAgentLoopTests(SimpleTestCase):
         self.assertEqual(len(result.traces), 2)
         self.assertIsNotNone(result.traces[0].error)
         self.assertIsNone(result.traces[1].error)
+
+
+class DBAskCommandTests(SimpleTestCase):
+    def test_cli_overrides_preserve_profile_and_model_settings(self):
+        original = DBAgentConfig(
+            database_url="postgresql://unused",
+            max_rows=200,
+            max_tool_calls=5,
+            model_max_tokens=8192,
+            enable_thinking=False,
+            profile_name="animals",
+        )
+        with (
+            patch(
+                "customer_service.management.commands.db_ask.DBAgentConfig.from_env",
+                return_value=original,
+            ),
+            patch(
+                "customer_service.management.commands.db_ask.OpenAILLMClient"
+            ) as client_class,
+            patch(
+                "customer_service.management.commands.db_ask.PostgresDatabaseAdapter"
+            ),
+            patch("customer_service.management.commands.db_ask.DBAgent") as agent_class,
+        ):
+            client_class.return_value.config.base_url = "http://model.invalid/v1"
+            agent_class.return_value.ask.return_value = DBAgentResult(
+                answer="Done",
+                model="test-model",
+                latency_ms=1.0,
+                traces=[],
+            )
+            call_command(
+                "db_ask",
+                "Question",
+                sql_limit=25,
+                max_tool_calls=2,
+                stdout=StringIO(),
+            )
+
+        overridden = agent_class.call_args.kwargs["config"]
+        self.assertEqual(overridden.max_rows, 25)
+        self.assertEqual(overridden.max_tool_calls, 2)
+        self.assertEqual(overridden.model_max_tokens, 8192)
+        self.assertFalse(overridden.enable_thinking)
+        self.assertEqual(overridden.profile_name, "animals")
 
 
 class MemoryTests(SimpleTestCase):
